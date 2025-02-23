@@ -21,8 +21,7 @@ consts.sortedParticleBoxIdFormat = {
 }
 
 consts.boxArrayEntryFormat = {
-	{name = "start", format = "uint32"},
-	{name = "count", format = "uint32"}
+	{name = "start", format = "uint32"}
 }
 
 consts.boxParticleDataFormat = {

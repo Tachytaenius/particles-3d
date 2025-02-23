@@ -12,10 +12,6 @@ struct SortedParticleBoxId {
 	uint particleId;
 };
 
-struct BoxArrayEntry {
-	uint start;
-	uint count;
-};
 const uint invalidBoxArrayDatum = 0xFFFFFFFF; // UINT32_MAX
 
 struct BoxParticleDataEntry {

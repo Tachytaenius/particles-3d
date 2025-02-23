@@ -13,6 +13,7 @@ local stage2Shader
 local stage3Shader
 local stage4Shader
 local stage5Shader
+local stage6Shader
 
 local view2DShader
 local view2DMesh
@@ -62,6 +63,7 @@ function love.load()
 	stage3Shader = stage(3)
 	stage4Shader = stage(4)
 	stage5Shader = stage(5)
+	stage6Shader = stage(6)
 
 	view2DShader = love.graphics.newShader(
 		"#pragma language glsl4\n" ..
@@ -73,7 +75,7 @@ function love.load()
 
 	local particleData = {}
 	for i = 1, consts.particleCount do
-		local position = consts.worldSize / 2 + util.randomInSphereVolume(consts.startPositionRadius)
+		local position = (love.math.random() < 0.4 and vec3(consts.startPositionRadius) or (consts.worldSize - consts.startPositionRadius)) + util.randomInSphereVolume(consts.startPositionRadius)
 		local function axis(w)
 			return (love.math.simplexNoise(
 				position.x * consts.startNoiseFrequency,
@@ -120,35 +122,42 @@ function love.update(dt)
 	stage2Shader:send("ParticleBoxIdsToSort", sortedParticleBoxIds) -- In/out
 	love.graphics.dispatchThreadgroups(stage2Shader, 1)
 
-	-- TODO: Parallelise
-	stage3Shader:send("SortedParticleBoxIds", sortedParticleBoxIds) -- In
-	stage3Shader:send("particleCount", consts.particleCount) -- In
 	stage3Shader:send("boxCount", consts.boxCount) -- In
 	stage3Shader:send("BoxArrayData", boxArrayData) -- Out
-	love.graphics.dispatchThreadgroups(stage3Shader, 1)
-
-	stage4Shader:send("SortedParticleBoxIds", sortedParticleBoxIds) -- In
-	stage4Shader:send("BoxArrayData", boxArrayData) -- In
-	stage4Shader:send("Particles", particleBufferA) -- In
-	stage4Shader:send("boxCount", consts.boxCount) -- In
-	stage4Shader:send("BoxParticleData", boxParticleData) -- Out
-	love.graphics.dispatchThreadgroups(stage4Shader,
-		math.ceil(consts.boxCount / stage4Shader:getLocalThreadgroupSize())
+	love.graphics.dispatchThreadgroups(stage3Shader,
+		math.ceil(consts.boxCount / stage3Shader:getLocalThreadgroupSize())
 	)
 
-	stage5Shader:send("particleCount", consts.particleCount) -- In
-	stage5Shader:send("ParticlesIn", particleBufferA) -- In
-	stage5Shader:send("gravityStrength", consts.gravityStrength) -- In
-	stage5Shader:send("dt", dt) -- In
-	stage5Shader:send("ParticleBoxIds", particleBoxIds) -- In
+	stage4Shader:send("SortedParticleBoxIds", sortedParticleBoxIds) -- In
+	stage4Shader:send("particleCount", consts.particleCount) -- In
+	stage4Shader:send("BoxArrayData", boxArrayData) -- Out
+	love.graphics.dispatchThreadgroups(stage4Shader,
+		math.ceil(consts.particleCount / stage4Shader:getLocalThreadgroupSize())
+	)
+
 	stage5Shader:send("SortedParticleBoxIds", sortedParticleBoxIds) -- In
 	stage5Shader:send("BoxArrayData", boxArrayData) -- In
-	stage5Shader:send("BoxParticleData", boxParticleData) -- In
-	-- stage5Shader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)})
-	stage5Shader:send("boxCount", consts.boxCount)
-	stage5Shader:send("ParticlesOut", particleBufferB) -- Out
+	stage5Shader:send("Particles", particleBufferA) -- In
+	stage5Shader:send("particleCount", consts.particleCount) -- In
+	stage5Shader:send("boxCount", consts.boxCount) -- In
+	stage5Shader:send("BoxParticleData", boxParticleData) -- Out
 	love.graphics.dispatchThreadgroups(stage5Shader,
-		math.ceil(consts.particleCount / stage5Shader:getLocalThreadgroupSize())
+		math.ceil(consts.boxCount / stage5Shader:getLocalThreadgroupSize())
+	)
+
+	stage6Shader:send("particleCount", consts.particleCount) -- In
+	stage6Shader:send("ParticlesIn", particleBufferA) -- In
+	stage6Shader:send("gravityStrength", consts.gravityStrength) -- In
+	stage6Shader:send("dt", dt) -- In
+	stage6Shader:send("ParticleBoxIds", particleBoxIds) -- In
+	stage6Shader:send("SortedParticleBoxIds", sortedParticleBoxIds) -- In
+	stage6Shader:send("BoxArrayData", boxArrayData) -- In
+	stage6Shader:send("BoxParticleData", boxParticleData) -- In
+	-- stage6Shader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)})
+	stage6Shader:send("boxCount", consts.boxCount)
+	stage6Shader:send("ParticlesOut", particleBufferB) -- Out
+	love.graphics.dispatchThreadgroups(stage6Shader,
+		math.ceil(consts.particleCount / stage6Shader:getLocalThreadgroupSize())
 	)
 end
 
