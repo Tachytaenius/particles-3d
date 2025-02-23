@@ -75,7 +75,7 @@ function love.load()
 
 	local particleData = {}
 	for i = 1, consts.particleCount do
-		local position = (love.math.random() < 0.4 and vec3(consts.startPositionRadius) or (consts.worldSize - consts.startPositionRadius)) + util.randomInSphereVolume(consts.startPositionRadius)
+		local position = vec3(love.math.random(), love.math.random(), love.math.random()) * consts.worldSize
 		local function axis(w)
 			return (love.math.simplexNoise(
 				position.x * consts.startNoiseFrequency,
@@ -120,7 +120,7 @@ function love.update(dt)
 	stage2Shader:send("ParticleBoxIdsToSort", sortedParticleBoxIds) -- In/out
 	-- love.graphics.dispatchThreadgroups(stage2Shader, )
 	local level = 2
-	while level < consts.sortedParticleBoxIdBufferSize do
+	while level <= consts.sortedParticleBoxIdBufferSize do
 		stage2Shader:send("level", level) -- In
 		local stage = math.floor(level / 2) -- Within stage 2
 		while stage > 0 do

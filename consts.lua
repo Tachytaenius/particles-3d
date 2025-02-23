@@ -33,13 +33,13 @@ consts.view2DMeshFormat = {
 	{name = "VertexPosition", location = 0, format = "float"} -- Dummy
 }
 
-consts.boxWidth = 8
-consts.boxHeight = 8
-consts.boxDepth = 8
+consts.boxWidth = 32
+consts.boxHeight = 32
+consts.boxDepth = 32
 
-consts.worldWidthBoxes = 64
-consts.worldHeightBoxes = 64
-consts.worldDepthBoxes = 64
+consts.worldWidthBoxes = 16
+consts.worldHeightBoxes = 16
+consts.worldDepthBoxes = 16
 
 -- Derived
 consts.boxCount = consts.worldWidthBoxes * consts.worldHeightBoxes * consts.worldDepthBoxes
@@ -47,11 +47,10 @@ consts.boxSize = vec3(consts.boxWidth, consts.boxHeight, consts.boxDepth)
 consts.worldSizeBoxes = vec3(consts.worldWidthBoxes, consts.worldHeightBoxes, consts.worldDepthBoxes)
 consts.worldSize = consts.boxSize * consts.worldSizeBoxes
 
-consts.particleCount = 1000
-consts.startPositionRadius = 32
-consts.startNoiseFrequency = 0.0001
-consts.startNoiseAmplitude = 0
-consts.startVelocityRadius = 0
+consts.particleCount = 10000
+consts.startNoiseFrequency = 10
+consts.startNoiseAmplitude = 8
+consts.startVelocityRadius = 0.01
 
 consts.gravityStrength = 1 -- Gravitational constant
 
