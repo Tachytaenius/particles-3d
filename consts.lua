@@ -55,4 +55,14 @@ consts.startVelocityRadius = 0
 
 consts.gravityStrength = 1 -- Gravitational constant
 
+local function nextPowerOfTwo(x)
+	local ret = 1
+	while ret < x do
+		ret = ret * 2
+	end
+	return ret
+end
+-- Derived
+consts.sortedParticleBoxIdBufferSize = nextPowerOfTwo(consts.particleCount)
+
 return consts

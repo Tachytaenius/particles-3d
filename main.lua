@@ -38,7 +38,7 @@ function love.load()
 		shaderstorage = true,
 		debugname = "Particle Box IDs"
 	})
-	sortedParticleBoxIds = love.graphics.newBuffer(consts.sortedParticleBoxIdFormat, consts.particleCount, {
+	sortedParticleBoxIds = love.graphics.newBuffer(consts.sortedParticleBoxIdFormat, consts.sortedParticleBoxIdBufferSize, {
 		shaderstorage = true,
 		debugname = "Sorted Particle Box IDs"
 	})
@@ -117,10 +117,24 @@ function love.update(dt)
 		math.ceil(consts.particleCount / stage1Shader:getLocalThreadgroupSize())
 	)
 
-	-- TODO: Parallelise
-	stage2Shader:send("particleCount", consts.particleCount) -- In
 	stage2Shader:send("ParticleBoxIdsToSort", sortedParticleBoxIds) -- In/out
-	love.graphics.dispatchThreadgroups(stage2Shader, 1)
+	-- love.graphics.dispatchThreadgroups(stage2Shader, )
+	local level = 2
+	while level < consts.sortedParticleBoxIdBufferSize do
+		stage2Shader:send("level", level) -- In
+		local stage = math.floor(level / 2) -- Within stage 2
+		while stage > 0 do
+			stage2Shader:send("stage", stage) -- In
+			love.graphics.dispatchThreadgroups(stage2Shader,
+				math.ceil(
+					math.floor(consts.sortedParticleBoxIdBufferSize / 2) /
+					stage2Shader:getLocalThreadgroupSize()
+				)
+			)
+			stage = math.floor(stage / 2)
+		end
+		level = level * 2
+	end
 
 	stage3Shader:send("boxCount", consts.boxCount) -- In
 	stage3Shader:send("BoxArrayData", boxArrayData) -- Out

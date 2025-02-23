@@ -1,30 +1,28 @@
 #line 1
 
+uniform uint level;
+uniform uint stage;
+
 buffer ParticleBoxIdsToSort {
 	SortedParticleBoxId[] particleBoxIdsToSort;
 };
-uniform uint particleCount;
 
-layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 void computemain() {
-	// One invocation (for now)
-	// I'm tired.
-	uint n = particleCount;
-	bool firstRun = true;
-	while (firstRun || n > 1) {
-		uint newN = 0;
-		for (uint i = 1; i < n; i++) {
-			if (
-				particleBoxIdsToSort[i - 1].boxId >
-				particleBoxIdsToSort[i].boxId
-			) {
-				SortedParticleBoxId temp = particleBoxIdsToSort[i - 1];
-				particleBoxIdsToSort[i - 1] = particleBoxIdsToSort[i];
-				particleBoxIdsToSort[i] = temp;
-				newN = i;
-			}
+	uint a = (gl_GlobalInvocationID.x / stage) * (stage * 2) + gl_GlobalInvocationID.x % stage;
+	uint b = a ^ stage;
+	SortedParticleBoxId arrayA = particleBoxIdsToSort[a];
+	SortedParticleBoxId arrayB = particleBoxIdsToSort[b];
+
+	if ((a & level) == 0) {
+		if (arrayA.boxId > arrayB.boxId) {
+			particleBoxIdsToSort[a] = arrayB;
+			particleBoxIdsToSort[b] = arrayA;
 		}
-		n = newN;
-		firstRun = false;
+	} else {
+		if (arrayA.boxId < arrayB.boxId) {
+			particleBoxIdsToSort[a] = arrayB;
+			particleBoxIdsToSort[b] = arrayA;
+		}
 	}
 }
