@@ -7,7 +7,10 @@ consts.tau = math.pi * 2
 consts.particleFormat = {
 	{name = "position", format = "floatvec3"},
 	{name = "velocity", format = "floatvec3"},
-	{name = "colour", format = "floatvec4"},
+	{name = "colour", format = "floatvec3"},
+	{name = "emissionCrossSection", format = "floatvec3"},
+	{name = "scatteranceCrossSection", format = "float"},
+	{name = "absorptionCrossSection", format = "float"},
 	{name = "mass", format = "float"}
 }
 
@@ -26,11 +29,11 @@ consts.boxArrayEntryFormat = {
 
 consts.boxParticleDataFormat = {
 	{name = "totalMass", format = "float"},
-	{name = "centreOfMass", format = "floatvec3"}
-}
-
-consts.view2DMeshFormat = {
-	{name = "VertexPosition", location = 0, format = "float"} -- Dummy
+	{name = "centreOfMass", format = "floatvec3"},
+	{name = "scatterance", format = "float"},
+	{name = "absorption", format = "float"},
+	{name = "averageColour", format = "floatvec3"},
+	{name = "emission", format = "floatvec3"}
 }
 
 consts.boxWidth = 16

@@ -38,29 +38,60 @@ uniform uint rayStepCount;
 
 const float colourMultiplier = 5.0;
 
+const VolumetricSample emptySpace = VolumetricSample (
+	0.0,
+	0.0,
+	vec3(0.0),
+	vec3(0.0)
+);
+
+VolumetricSample sampleVolumetrics(vec3 position) {
+	if (position.x < 0.0 || position.y < 0.0 || position.z < 0.0) {
+		return emptySpace;
+	}
+	uvec3 boxCoords = uvec3(position / boxSize);
+	if (boxCoords.x >= worldSizeBoxes.x || boxCoords.y >= worldSizeBoxes.y || boxCoords.z >= worldSizeBoxes.z) {
+		return emptySpace;
+	}
+	uint boxId =
+		boxCoords.x * worldSizeBoxes.x * worldSizeBoxes.y +
+		boxCoords.y * worldSizeBoxes.y +
+		boxCoords.z;
+	if (boxArrayData[boxId] == invalidBoxArrayDatum) {
+		return emptySpace; // Empty box, its data may be wrong
+	}
+
+	BoxParticleDataEntry entry = boxParticleData[boxId];
+	float density = entry.totalMass / (boxSize.x * boxSize.y * boxSize.z);
+	
+	return VolumetricSample (
+		entry.scatterance,
+		entry.absorption,
+		entry.averageColour,
+		entry.emission
+	);
+}
+
 vec3 getRayColour(vec3 rayPosition, vec3 rayDirection) {
-	vec3 outColour = vec3(0.0);
+	vec3 totalRayLight = vec3(0.0);
+	float totalTransmittance = 1.0;
 	for (uint rayStep = 0; rayStep < rayStepCount; rayStep++) {
 		float t = rayStepSize * float(rayStep);
 		vec3 currentPosition = rayPosition + rayDirection * t;
-		if (currentPosition.x < 0.0 || currentPosition.y < 0.0 || currentPosition.z < 0.0) {
-			continue;
-		}
-		uvec3 boxCoords = uvec3(currentPosition / boxSize);
-		if (boxCoords.x >= worldSizeBoxes.x || boxCoords.y >= worldSizeBoxes.y || boxCoords.z >= worldSizeBoxes.z) {
-			continue;
-		}
-		uint boxId =
-			boxCoords.x * worldSizeBoxes.x * worldSizeBoxes.y +
-			boxCoords.y * worldSizeBoxes.y +
-			boxCoords.z;
-		if (boxArrayData[boxId] == invalidBoxArrayDatum) {
-			continue; // Empty box, its data may be wrong
-		}
-		float density = boxParticleData[boxId].totalMass / (boxSize.x * boxSize.y * boxSize.z);
-		outColour += rayStepSize * density * colourMultiplier;
+
+		VolumetricSample volumetricSample = sampleVolumetrics(currentPosition);
+
+		float extinction = volumetricSample.absorption + volumetricSample.scatterance;
+
+		float transmittanceThisStep = exp(-extinction * rayStepSize);
+		vec3 incomingLight = vec3(0.0); // TODO
+		vec3 rayLightThisStep = rayStepSize * (volumetricSample.emission + volumetricSample.colour * volumetricSample.scatterance * incomingLight);
+
+		totalRayLight *= transmittanceThisStep;
+		totalRayLight += rayLightThisStep;
+		totalTransmittance *= transmittanceThisStep;
 	}
-	return outColour;
+	return totalRayLight;
 }
 
 vec4 effect(vec4 loveColour, sampler2D image, vec2 textureCoords, vec2 windowCoords) {

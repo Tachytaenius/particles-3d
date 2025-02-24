@@ -15,8 +15,6 @@ local stage4Shader
 local stage5Shader
 local stage6Shader
 
-local view2DShader
-local view2DMesh
 local viewShader
 local dummyTexture
 local outputCanvas
@@ -67,14 +65,6 @@ function love.load()
 	stage5Shader = stage(5)
 	stage6Shader = stage(6)
 
-	view2DShader = love.graphics.newShader(
-		"#pragma language glsl4\n" ..
-		love.filesystem.read("shaders/include/structs.glsl") ..
-		love.filesystem.read("shaders/view2D.glsl")
-	)
-
-	view2DMesh = love.graphics.newMesh(consts.view2DMeshFormat, consts.particleCount, "points")
-
 	viewShader = love.graphics.newShader(
 		"#pragma language glsl4\n" ..
 		love.filesystem.read("shaders/include/structs.glsl") ..
@@ -101,14 +91,28 @@ function love.load()
 
 		local velocity = util.randomInSphereVolume(consts.startVelocityRadius)
 
-		local colour = {1, 1, 1, 0.125}
+		local function colourChannel()
+			return love.math.random()
+		end
+		local colour = {colourChannel(), colourChannel(), colourChannel()}
 
-		local mass = 2
+		local mass = love.math.random() ^ 5 * 8
+
+		local function emissionChannel()
+			return love.math.random() * 32
+		end
+		local emissionCrossSection = {emissionChannel(), emissionChannel(), emissionChannel()} -- Linear space
+
+		local scatteranceCrossSection = love.math.random() * 5
+		local absorptionCrossSection = love.math.random() * 2
 
 		particleData[i] = {
 			position.x, position.y, position.z,
 			velocity.x, velocity.y, velocity.z,
-			colour[1], colour[2], colour[3], colour[4],
+			colour[1], colour[2], colour[3],
+			emissionCrossSection[1], emissionCrossSection[2], emissionCrossSection[3],
+			scatteranceCrossSection,
+			absorptionCrossSection,
 			mass
 		}
 	end
@@ -185,6 +189,7 @@ function love.update(dt)
 	stage5Shader:send("Particles", particleBufferA) -- In
 	stage5Shader:send("particleCount", consts.particleCount) -- In
 	stage5Shader:send("boxCount", consts.boxCount) -- In
+	stage5Shader:send("boxSize", {vec3.components(consts.boxSize)})
 	stage5Shader:send("BoxParticleData", boxParticleData) -- Out
 	love.graphics.dispatchThreadgroups(stage5Shader,
 		math.ceil(consts.boxCount / stage5Shader:getLocalThreadgroupSize())
@@ -271,18 +276,10 @@ function love.draw()
 	viewShader:send("BoxArrayData", boxArrayData)
 	viewShader:send("boxSize", {vec3.components(consts.boxSize)})
 	viewShader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)})
-	viewShader:send("rayStepSize", 0.5)
-	viewShader:send("rayStepCount", 2048)
+	viewShader:send("rayStepSize", 1)
+	viewShader:send("rayStepCount", 1024)
 	love.graphics.draw(dummyTexture, 0, 0, 0, outputCanvas:getDimensions())
 	love.graphics.setShader()
-
-	-- love.graphics.setShader(view2DShader)
-	-- view2DShader:send("Particles", particleBufferB)
-	-- love.graphics.translate(love.graphics.getWidth() / 2 - consts.worldSize.x / 2, love.graphics.getHeight() / 2 - consts.worldSize.y / 2)
-	-- love.graphics.draw(view2DMesh)
-	-- love.graphics.setShader()
-	-- love.graphics.rectangle("line", 0, 0, consts.worldSize.x, consts.worldSize.y)
-	-- love.graphics.origin()
 
 	love.graphics.setCanvas()
 	love.graphics.draw(outputCanvas)
