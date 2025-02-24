@@ -33,13 +33,13 @@ consts.view2DMeshFormat = {
 	{name = "VertexPosition", location = 0, format = "float"} -- Dummy
 }
 
-consts.boxWidth = 32
-consts.boxHeight = 32
-consts.boxDepth = 32
+consts.boxWidth = 16
+consts.boxHeight = 16
+consts.boxDepth = 16
 
-consts.worldWidthBoxes = 16
-consts.worldHeightBoxes = 16
-consts.worldDepthBoxes = 16
+consts.worldWidthBoxes = 32
+consts.worldHeightBoxes = 32
+consts.worldDepthBoxes = 32
 
 -- Derived
 consts.boxCount = consts.worldWidthBoxes * consts.worldHeightBoxes * consts.worldDepthBoxes
@@ -63,5 +63,25 @@ local function nextPowerOfTwo(x)
 end
 -- Derived
 consts.sortedParticleBoxIdBufferSize = nextPowerOfTwo(consts.particleCount)
+
+consts.rightVector = vec3(1, 0, 0)
+consts.upVector = vec3(0, 1, 0)
+consts.forwardVector = vec3(0, 0, 1)
+
+consts.controls = {
+	moveRight = "d",
+	moveLeft = "a",
+	moveUp = "e",
+	moveDown = "q",
+	moveForwards = "w",
+	moveBackwards = "s",
+
+	pitchDown = "k",
+	pitchUp = "i",
+	yawRight = "l",
+	yawLeft = "j",
+	rollAnticlockwise = "u",
+	rollClockwise = "o"
+}
 
 return consts

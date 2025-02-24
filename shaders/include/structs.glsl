@@ -11,6 +11,7 @@ struct SortedParticleBoxId {
 	uint boxId;
 	uint particleId;
 };
+const uint invalidSortedParticleBoxId = 0xFFFFFFFF; // UINT32_MAX
 
 const uint invalidBoxArrayDatum = 0xFFFFFFFF; // UINT32_MAX
 

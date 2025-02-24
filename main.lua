@@ -17,14 +17,16 @@ local stage6Shader
 
 local view2DShader
 local view2DMesh
+local viewShader
+local dummyTexture
+local outputCanvas
+local camera
 
 local particleBufferA, particleBufferB
 local particleBoxIds, sortedParticleBoxIds
 local boxArrayData, boxParticleData
 
 function love.load()
-	-- TODO: Remove readback
-
 	particleBufferA = love.graphics.newBuffer(consts.particleFormat, consts.particleCount, {
 		shaderstorage = true,
 		debugname = "Particles A"
@@ -73,6 +75,16 @@ function love.load()
 
 	view2DMesh = love.graphics.newMesh(consts.view2DMeshFormat, consts.particleCount, "points")
 
+	viewShader = love.graphics.newShader(
+		"#pragma language glsl4\n" ..
+		love.filesystem.read("shaders/include/structs.glsl") ..
+		love.filesystem.read("shaders/view.glsl")
+	)
+
+	dummyTexture = love.graphics.newImage(love.image.newImageData(1, 1))
+
+	outputCanvas = love.graphics.newCanvas(love.graphics.getDimensions())
+
 	local particleData = {}
 	for i = 1, consts.particleCount do
 		local position = vec3(love.math.random(), love.math.random(), love.math.random()) * consts.worldSize
@@ -89,7 +101,7 @@ function love.load()
 
 		local velocity = util.randomInSphereVolume(consts.startVelocityRadius)
 
-		local colour = {1, 1, 1, 0.5}
+		local colour = {1, 1, 1, 0.125}
 
 		local mass = 2
 
@@ -101,6 +113,26 @@ function love.load()
 		}
 	end
 	particleBufferB:setArrayData(particleData) -- Gets swapped immediately
+
+	local sortedParticleBoxIdsData = {}
+	local invalid = 0xFFFFFFFF -- UINT32_MAX
+	for i = 1, consts.sortedParticleBoxIdBufferSize do
+		sortedParticleBoxIdsData[i] = {
+			invalid,
+			invalid
+		}
+	end
+	sortedParticleBoxIds:setArrayData(sortedParticleBoxIdsData)
+
+	camera = {
+		position = vec3(consts.worldSize.x * 0.5, consts.worldSize.y * 0.5, -consts.worldSize.z),
+		orientation = quat(),
+		verticalFOV = math.rad(70),
+		speed = 200,
+		angularSpeed = 1,
+		farPlaneDistance = 2048,
+		nearPlaneDistance = 0.125
+	}
 end
 
 function love.update(dt)
@@ -118,7 +150,6 @@ function love.update(dt)
 	)
 
 	stage2Shader:send("ParticleBoxIdsToSort", sortedParticleBoxIds) -- In/out
-	-- love.graphics.dispatchThreadgroups(stage2Shader, )
 	local level = 2
 	while level <= consts.sortedParticleBoxIdBufferSize do
 		stage2Shader:send("level", level) -- In
@@ -173,16 +204,88 @@ function love.update(dt)
 	love.graphics.dispatchThreadgroups(stage6Shader,
 		math.ceil(consts.particleCount / stage6Shader:getLocalThreadgroupSize())
 	)
+
+	local translation = vec3()
+	if love.keyboard.isDown(consts.controls.moveRight) then
+		translation = translation + consts.rightVector
+	end
+	if love.keyboard.isDown(consts.controls.moveLeft) then
+		translation = translation - consts.rightVector
+	end
+	if love.keyboard.isDown(consts.controls.moveUp) then
+		translation = translation + consts.upVector
+	end
+	if love.keyboard.isDown(consts.controls.moveDown) then
+		translation = translation - consts.upVector
+	end
+	if love.keyboard.isDown(consts.controls.moveForwards) then
+		translation = translation + consts.forwardVector
+	end
+	if love.keyboard.isDown(consts.controls.moveBackwards) then
+		translation = translation - consts.forwardVector
+	end
+	camera.position = camera.position + vec3.rotate(util.normaliseOrZero(translation), camera.orientation) * camera.speed * dt
+
+	local rotation = vec3()
+	if love.keyboard.isDown(consts.controls.pitchDown) then
+		rotation = rotation + consts.rightVector
+	end
+	if love.keyboard.isDown(consts.controls.pitchUp) then
+		rotation = rotation - consts.rightVector
+	end
+	if love.keyboard.isDown(consts.controls.yawRight) then
+		rotation = rotation + consts.upVector
+	end
+	if love.keyboard.isDown(consts.controls.yawLeft) then
+		rotation = rotation - consts.upVector
+	end
+	if love.keyboard.isDown(consts.controls.rollAnticlockwise) then
+		rotation = rotation + consts.forwardVector
+	end
+	if love.keyboard.isDown(consts.controls.rollClockwise) then
+		rotation = rotation - consts.forwardVector
+	end
+	local rotationQuat = quat.fromAxisAngle(util.limitVectorLength(rotation, camera.angularSpeed * dt))
+	camera.orientation = quat.normalise(camera.orientation * rotationQuat) -- Normalise to prevent numeric drift
 end
 
 function love.draw()
-	love.graphics.setShader(view2DShader)
-	view2DShader:send("Particles", particleBufferB)
-	love.graphics.translate(love.graphics.getWidth() / 2 - consts.worldSize.x / 2, love.graphics.getHeight() / 2 - consts.worldSize.y / 2)
-	love.graphics.draw(view2DMesh)
-	love.graphics.setShader()
-	love.graphics.rectangle("line", 0, 0, consts.worldSize.x, consts.worldSize.y)
+	love.graphics.setCanvas(outputCanvas)
+	love.graphics.clear(0, 0, 0, 1)
 
-	love.graphics.origin()
+	local worldToCamera = mat4.camera(camera.position, camera.orientation)
+	local worldToCameraStationary = mat4.camera(vec3(), camera.orientation)
+	local cameraToClip = mat4.perspectiveLeftHanded(
+		outputCanvas:getWidth() / outputCanvas:getHeight(),
+		camera.verticalFOV,
+		camera.farPlaneDistance,
+		camera.nearPlaneDistance
+	)
+	local worldToClip = cameraToClip * worldToCamera
+	local clipToSky = mat4.inverse(cameraToClip * worldToCameraStationary)
+
+	love.graphics.setShader(viewShader)
+	viewShader:send("clipToSky", {mat4.components(clipToSky)})
+	viewShader:send("cameraPosition", {vec3.components(camera.position)})
+	viewShader:send("BoxParticleData", boxParticleData)
+	viewShader:send("BoxArrayData", boxArrayData)
+	viewShader:send("boxSize", {vec3.components(consts.boxSize)})
+	viewShader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)})
+	viewShader:send("rayStepSize", 0.5)
+	viewShader:send("rayStepCount", 2048)
+	love.graphics.draw(dummyTexture, 0, 0, 0, outputCanvas:getDimensions())
+	love.graphics.setShader()
+
+	-- love.graphics.setShader(view2DShader)
+	-- view2DShader:send("Particles", particleBufferB)
+	-- love.graphics.translate(love.graphics.getWidth() / 2 - consts.worldSize.x / 2, love.graphics.getHeight() / 2 - consts.worldSize.y / 2)
+	-- love.graphics.draw(view2DMesh)
+	-- love.graphics.setShader()
+	-- love.graphics.rectangle("line", 0, 0, consts.worldSize.x, consts.worldSize.y)
+	-- love.graphics.origin()
+
+	love.graphics.setCanvas()
+	love.graphics.draw(outputCanvas)
+
 	love.graphics.print(love.timer.getFPS())
 end
