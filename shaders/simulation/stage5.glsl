@@ -12,13 +12,17 @@ buffer SortedParticleBoxIds {
 buffer BoxArrayData {
 	uint[] boxArrayData;
 };
-
-buffer BoxParticleData {
-	BoxParticleDataEntry[] boxParticleData;
-};
 uniform uint boxCount;
 
-uniform vec3 boxSize;
+uniform uvec3 worldSizeBoxes;
+uniform float boxVolume;
+
+uniform layout(r32f) image3D mass;
+uniform layout(rgba32f) image3D centreOfMass;
+uniform layout(r32f) image3D scatterance;
+uniform layout(r32f) image3D absorption;
+uniform layout(rgba32f) image3D averageColour;
+uniform layout(rgba32f) image3D emission;
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 void computemain() {
@@ -28,11 +32,6 @@ void computemain() {
 	}
 
 	uint thisBoxArrayStart = boxArrayData[boxId];
-	if (thisBoxArrayStart == invalidBoxArrayDatum) {
-		// Empty box
-		boxParticleData[boxId] = emptyBoxParticleData; // For rendering to not need to check emptiness
-		return;
-	}
 
 	float massTotal = 0.0;
 	vec3 weightedPositionTotal = vec3(0.0);
@@ -53,18 +52,38 @@ void computemain() {
 		emissionCrossSectionTotal += particle.emissionCrossSection;
 		scatteranceCrossSectionTotal += particle.scatteranceCrossSection;
 		absorptionCrossSectionTotal += particle.absorptionCrossSection;
-
 		weightedColourTotal += particle.colour * particle.mass;
 	}
 
-	float boxVolume = boxSize.x * boxSize.y * boxSize.z;
+	uvec3 boxPosition = uvec3(
+		boxId % worldSizeBoxes.x,
+		(boxId / worldSizeBoxes.x) % worldSizeBoxes.y,
+		(boxId / worldSizeBoxes.x) / worldSizeBoxes.y
+	);
+	ivec3 imageCoord = ivec3(boxPosition);
 
-	boxParticleData[boxId] = BoxParticleDataEntry (
-		massTotal,
-		weightedPositionTotal / massTotal,
-		scatteranceCrossSectionTotal / boxVolume,
-		absorptionCrossSectionTotal / boxVolume,
-		weightedColourTotal / massTotal,
-		emissionCrossSectionTotal / boxVolume
+	imageStore(mass, imageCoord,
+		vec4(massTotal, 0.0, 0.0, 1.0)
+	);
+	imageStore(centreOfMass, imageCoord,
+		vec4(
+			massTotal > 0.0 ? weightedPositionTotal / massTotal : vec3(0.0), // Don't care value if mass is zero
+			1.0
+		)
+	);
+	imageStore(scatterance, imageCoord,
+		vec4(scatteranceCrossSectionTotal / boxVolume, 0.0, 0.0, 1.0)
+	);
+	imageStore(absorption, imageCoord,
+		vec4(absorptionCrossSectionTotal / boxVolume, 0.0, 0.0, 1.0)
+	);
+	imageStore(averageColour, imageCoord,
+		vec4(
+			massTotal > 0.0 ? weightedColourTotal / massTotal : vec3(0.0), // Don't care value if mass is zero
+			1.0
+		)
+	);
+	imageStore(emission, imageCoord,
+		vec4(emissionCrossSectionTotal / boxVolume, 1.0)
 	);
 }

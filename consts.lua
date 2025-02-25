@@ -27,15 +27,6 @@ consts.boxArrayEntryFormat = {
 	{name = "start", format = "uint32"}
 }
 
-consts.boxParticleDataFormat = {
-	{name = "totalMass", format = "float"},
-	{name = "centreOfMass", format = "floatvec3"},
-	{name = "scatterance", format = "float"},
-	{name = "absorption", format = "float"},
-	{name = "averageColour", format = "floatvec3"},
-	{name = "emission", format = "floatvec3"}
-}
-
 consts.boxWidth = 16
 consts.boxHeight = 16
 consts.boxDepth = 16
@@ -54,6 +45,9 @@ consts.particleCount = 10000
 consts.startNoiseFrequency = 10
 consts.startNoiseAmplitude = 8
 consts.startVelocityRadius = 0.01
+
+consts.rayStepSize = 8
+consts.rayStepCount = 120
 
 consts.gravityStrength = 1 -- Gravitational constant
 

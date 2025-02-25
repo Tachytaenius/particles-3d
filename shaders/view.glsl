@@ -21,90 +21,23 @@ vec4 position(mat4 loveTransform, vec4 vertexPosition) {
 
 #ifdef PIXEL
 
-readonly buffer BoxParticleData {
-	BoxParticleDataEntry[] boxParticleData;
-};
-
-readonly buffer BoxArrayData {
-	uint[] boxArrayData;
-};
+uniform sampler3D scatterance;
+uniform sampler3D absorption;
+uniform sampler3D averageColour;
+uniform sampler3D emission;
 
 uniform vec3 cameraPosition;
-uniform vec3 boxSize;
-uniform uvec3 worldSizeBoxes;
 uniform vec3 worldSize;
-uniform bool nearestNeighbour;
 uniform float rayStepSize;
 uniform uint rayStepCount;
 
-const float colourMultiplier = 5.0;
-
-BoxParticleDataEntry getBoxParticleData(vec3 position) {
-	if (position.x < 0.0 || position.y < 0.0 || position.z < 0.0) {
-		return emptyBoxParticleData;
-	}
-	uvec3 boxCoords = uvec3(position / boxSize);
-	if (boxCoords.x >= worldSizeBoxes.x || boxCoords.y >= worldSizeBoxes.y || boxCoords.z >= worldSizeBoxes.z) {
-		return emptyBoxParticleData;
-	}
-	uint boxId =
-		boxCoords.x * worldSizeBoxes.x * worldSizeBoxes.y +
-		boxCoords.y * worldSizeBoxes.y +
-		boxCoords.z;
-	// Box data is set to usable empty data when empty so that we don't need to check here
-	// if (boxArrayData[boxId] == invalidBoxArrayDatum) {
-	// 	return emptyBoxParticleData; // Empty box
-	// }
-	return boxParticleData[boxId];
-}
-
-VolumetricSample sampleVolumetricsNearestNeighbour(vec3 position) {
-	BoxParticleDataEntry entry = getBoxParticleData(position);
-
+VolumetricSample sampleVolumetrics(vec3 position) {
+	vec3 textureCoords = position / worldSize;
 	return VolumetricSample (
-		entry.scatterance,
-		entry.absorption,
-		entry.averageColour,
-		entry.emission
-	);
-}
-
-VolumetricSample sampleVolumetricsTrilinear(vec3 position) {
-	// Trilinear interpolation
-	vec3 positionUsable = position - boxSize * 0.5;
-	vec3 fractional = mod(positionUsable, boxSize) / boxSize;
-	vec4 swizzlableOffset = vec4(boxSize, 0.0); // Swizzle with xyz but replace components with w when not offset on that axis
-	// n is negative, p is positive
-	BoxParticleDataEntry nnn = getBoxParticleData(positionUsable + swizzlableOffset.www);
-	BoxParticleDataEntry nnp = getBoxParticleData(positionUsable + swizzlableOffset.wwz);
-	BoxParticleDataEntry npn = getBoxParticleData(positionUsable + swizzlableOffset.wyw);
-	BoxParticleDataEntry npp = getBoxParticleData(positionUsable + swizzlableOffset.wyz);
-	BoxParticleDataEntry pnn = getBoxParticleData(positionUsable + swizzlableOffset.xww);
-	BoxParticleDataEntry pnp = getBoxParticleData(positionUsable + swizzlableOffset.xwz);
-	BoxParticleDataEntry ppn = getBoxParticleData(positionUsable + swizzlableOffset.xyw);
-	BoxParticleDataEntry ppp = getBoxParticleData(positionUsable + swizzlableOffset.xyz);
-
-	return VolumetricSample (
-		trilinearMix(
-			nnn.scatterance, nnp.scatterance, npn.scatterance, npp.scatterance,
-			pnn.scatterance, pnp.scatterance, ppn.scatterance, ppp.scatterance,
-			fractional
-		),
-		trilinearMix(
-			nnn.absorption, nnp.absorption, npn.absorption, npp.absorption,
-			pnn.absorption, pnp.absorption, ppn.absorption, ppp.absorption,
-			fractional
-		),
-		trilinearMix(
-			nnn.averageColour, nnp.averageColour, npn.averageColour, npp.averageColour,
-			pnn.averageColour, pnp.averageColour, ppn.averageColour, ppp.averageColour,
-			fractional
-		),
-		trilinearMix(
-			nnn.emission, nnp.emission, npn.emission, npp.emission,
-			pnn.emission, pnp.emission, ppn.emission, ppp.emission,
-			fractional
-		)
+		Texel(scatterance, textureCoords).r,
+		Texel(absorption, textureCoords).r,
+		Texel(averageColour, textureCoords).rgb,
+		Texel(emission, textureCoords).rgb
 	);
 }
 
@@ -115,9 +48,7 @@ vec3 getRayColour(vec3 rayPosition, vec3 rayDirection) {
 		float t = rayStepSize * float(rayStep);
 		vec3 currentPosition = rayPosition + rayDirection * t;
 
-		VolumetricSample volumetricSample = nearestNeighbour ?
-			sampleVolumetricsNearestNeighbour(currentPosition) :
-			sampleVolumetricsTrilinear(currentPosition);
+		VolumetricSample volumetricSample = sampleVolumetrics(currentPosition);
 
 		float extinction = volumetricSample.absorption + volumetricSample.scatterance;
 

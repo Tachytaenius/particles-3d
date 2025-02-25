@@ -20,10 +20,10 @@ buffer BoxArrayData {
 	uint[] boxArrayData;
 };
 
-buffer BoxParticleData {
-	BoxParticleDataEntry[] boxParticleData;
-};
+uniform layout(r32f) image3D mass;
+uniform layout(rgba32f) image3D centreOfMass;
 
+uniform uvec3 worldSizeBoxes;
 uniform float dt;
 uniform float gravityStrength;
 uniform uint boxCount;
@@ -52,17 +52,6 @@ void computemain() {
 
 	// Gravitate towards all other boxes considering each box's particles together
 
-	// for (uint z = 0; z < worldSizeBoxes.z; z++) {
-	// 	for (uint y = 0; y < worldSizeBoxes.y; y++) {
-	// 		for (uint x = 0; x < worldSizeBoxes.x; x++) {
-	// 			uint boxId =
-	// 				boxPosition.x * worldSizeBoxes.x * worldSizeBoxes.y +
-	// 				boxPosition.y * worldSizeBoxes.y +
-	// 				boxPosition.z;
-	// 		}
-	// 	}
-	// }
-
 	for (uint boxId = 0; boxId < boxCount; boxId++) {
 		if (boxId == particleBoxId) {
 			// This is the same box as the particle
@@ -72,8 +61,15 @@ void computemain() {
 			// This box is empty
 			continue;
 		}
-		BoxParticleDataEntry boxData = boxParticleData[boxId];
-		accelerationWithoutStrength += getAccelerationWithoutStrength(boxData.totalMass, boxData.centreOfMass - particle.position);
+		uvec3 boxPosition = uvec3(
+			boxId % worldSizeBoxes.x,
+			(boxId / worldSizeBoxes.x) % worldSizeBoxes.y,
+			(boxId / worldSizeBoxes.x) / worldSizeBoxes.y
+		);
+		ivec3 imageCoord = ivec3(boxPosition);
+		float mass = imageLoad(mass, imageCoord).r;
+		vec3 centreOfMass = imageLoad(centreOfMass, imageCoord).rgb;
+		accelerationWithoutStrength += getAccelerationWithoutStrength(mass, centreOfMass - particle.position);
 	}
 
 	// Gravitate towards all particles in the same box

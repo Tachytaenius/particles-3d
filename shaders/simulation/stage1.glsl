@@ -36,10 +36,7 @@ void computemain() {
 	particles[particleId] = particle;
 
 	uvec3 boxPosition = min(worldSizeBoxes - 1, uvec3(max(vec3(0.0), particle.position / boxSize)));
-	uint boxId =
-		boxPosition.x * worldSizeBoxes.x * worldSizeBoxes.y +
-		boxPosition.y * worldSizeBoxes.y +
-		boxPosition.z;
+	uint boxId = (boxPosition.z * worldSizeBoxes.y + boxPosition.y) * worldSizeBoxes.x + boxPosition.x;
 	particleBoxIds[particleId] = boxId;
 	particleBoxIdsToSort[particleId] = SortedParticleBoxId (
 		boxId,

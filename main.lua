@@ -22,7 +22,14 @@ local camera
 
 local particleBufferA, particleBufferB
 local particleBoxIds, sortedParticleBoxIds
-local boxArrayData, boxParticleData
+local boxArrayData
+
+local massTexture
+local centreOfMassTexture
+local scatteranceTexture
+local absorptionTexture
+local averageColourTexture
+local emissionTexture
 
 function love.load()
 	particleBufferA = love.graphics.newBuffer(consts.particleFormat, consts.particleCount, {
@@ -47,10 +54,25 @@ function love.load()
 		shaderstorage = true,
 		debugname = "Box Array Data"
 	})
-	boxParticleData = love.graphics.newBuffer(consts.boxParticleDataFormat, consts.boxCount, {
-		shaderstorage = true,
-		debugname = "Box Particle Data"
-	})
+
+	local function newBoxParticleDataTexture(format, debugName)
+		local canvas = love.graphics.newCanvas(consts.worldWidthBoxes, consts.worldHeightBoxes, consts.worldDepthBoxes, {
+			type = "volume",
+			format = format,
+			computewrite = true,
+			debugname = debugName
+		})
+		canvas:setFilter("linear", "linear")
+		-- canvas:setFilter("nearest", "nearest")
+		canvas:setWrap("clampzero", "clampzero", "clampzero")
+		return canvas
+	end
+	massTexture = newBoxParticleDataTexture("r32f", "Mass Texture")
+	centreOfMassTexture = newBoxParticleDataTexture("rgba32f", "Centre of Mass Texture") -- Alpha is unused
+	scatteranceTexture = newBoxParticleDataTexture("r32f", "Scatterance Texture")
+	absorptionTexture = newBoxParticleDataTexture("r32f", "Absorption Texture")
+	averageColourTexture = newBoxParticleDataTexture("rgba32f", "Average Colour Texture") -- Alpha is unused
+	emissionTexture = newBoxParticleDataTexture("rgba32f", "Emission Texture") -- Alpha is unused
 
 	local structsCode = love.filesystem.read("shaders/include/structs.glsl")
 
@@ -141,7 +163,7 @@ function love.load()
 	sortedParticleBoxIds:setArrayData(sortedParticleBoxIdsData)
 
 	camera = {
-		position = vec3(consts.worldSize.x * 0.5, consts.worldSize.y * 0.5, -consts.worldSize.z),
+		position = consts.worldSize / 2,
 		orientation = quat(),
 		verticalFOV = math.rad(70),
 		speed = 200,
@@ -197,16 +219,23 @@ function love.update(dt)
 	)
 
 	stage5Shader:send("SortedParticleBoxIds", sortedParticleBoxIds) -- In
-	stage5Shader:send("BoxArrayData", boxArrayData) -- In
 	stage5Shader:send("Particles", particleBufferA) -- In
 	stage5Shader:send("particleCount", consts.particleCount) -- In
+	stage5Shader:send("BoxArrayData", boxArrayData) -- In
 	stage5Shader:send("boxCount", consts.boxCount) -- In
-	stage5Shader:send("boxSize", {vec3.components(consts.boxSize)})
-	stage5Shader:send("BoxParticleData", boxParticleData) -- Out
+	stage5Shader:send("boxVolume", consts.boxSize.x * consts.boxSize.y * consts.boxSize.z)
+	stage5Shader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)})
+	stage5Shader:send("mass", massTexture) -- Out
+	stage5Shader:send("centreOfMass", centreOfMassTexture) -- Out
+	stage5Shader:send("scatterance", scatteranceTexture) -- Out
+	stage5Shader:send("absorption", absorptionTexture) -- Out
+	stage5Shader:send("averageColour", averageColourTexture) -- Out
+	stage5Shader:send("emission", emissionTexture) -- Out
 	love.graphics.dispatchThreadgroups(stage5Shader,
 		math.ceil(consts.boxCount / stage5Shader:getLocalThreadgroupSize())
 	)
 
+	stage6Shader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)})
 	stage6Shader:send("particleCount", consts.particleCount) -- In
 	stage6Shader:send("ParticlesIn", particleBufferA) -- In
 	stage6Shader:send("gravityStrength", consts.gravityStrength) -- In
@@ -214,9 +243,9 @@ function love.update(dt)
 	stage6Shader:send("ParticleBoxIds", particleBoxIds) -- In
 	stage6Shader:send("SortedParticleBoxIds", sortedParticleBoxIds) -- In
 	stage6Shader:send("BoxArrayData", boxArrayData) -- In
-	stage6Shader:send("BoxParticleData", boxParticleData) -- In
-	-- stage6Shader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)})
-	stage6Shader:send("boxCount", consts.boxCount)
+	stage6Shader:send("mass", massTexture) -- In
+	stage6Shader:send("centreOfMass", centreOfMassTexture) -- In
+	stage6Shader:send("boxCount", consts.boxCount) -- In
 	stage6Shader:send("ParticlesOut", particleBufferB) -- Out
 	love.graphics.dispatchThreadgroups(stage6Shader,
 		math.ceil(consts.particleCount / stage6Shader:getLocalThreadgroupSize())
@@ -284,12 +313,13 @@ function love.draw()
 	love.graphics.setShader(viewShader)
 	viewShader:send("clipToSky", {mat4.components(clipToSky)})
 	viewShader:send("cameraPosition", {vec3.components(camera.position)})
-	viewShader:send("BoxParticleData", boxParticleData)
-	viewShader:send("boxSize", {vec3.components(consts.boxSize)})
-	viewShader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)})
-	viewShader:send("rayStepSize", 1)
-	viewShader:send("rayStepCount", 1024)
-	viewShader:send("nearestNeighbour", false)
+	viewShader:send("scatterance", scatteranceTexture)
+	viewShader:send("absorption", absorptionTexture)
+	viewShader:send("averageColour", averageColourTexture)
+	viewShader:send("emission", emissionTexture)
+	viewShader:send("worldSize", {vec3.components(consts.worldSize)})
+	viewShader:send("rayStepSize", consts.rayStepSize)
+	viewShader:send("rayStepCount", consts.rayStepCount)
 	love.graphics.draw(dummyTexture, 0, 0, 0, outputCanvas:getDimensions())
 	love.graphics.setShader()
 
