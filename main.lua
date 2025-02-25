@@ -52,9 +52,11 @@ function love.load()
 		debugname = "Box Particle Data"
 	})
 
+	local structsCode = love.filesystem.read("shaders/include/structs.glsl")
+
 	local function stage(number)
 		return love.graphics.newComputeShader(
-			love.filesystem.read("shaders/include/structs.glsl") ..
+			structsCode ..
 			love.filesystem.read("shaders/simulation/stage" .. number .. ".glsl")
 		)
 	end
@@ -65,9 +67,19 @@ function love.load()
 	stage5Shader = stage(5)
 	stage6Shader = stage(6)
 
+	local trilinearCode = love.filesystem.read("shaders/include/trilinearMix.glsl")
+	local function trilinearCodeType(typeName)
+		return
+			"#define TYPE " .. typeName .. "\n" ..
+			trilinearCode ..
+			"#undef TYPE\n"
+	end
+
 	viewShader = love.graphics.newShader(
 		"#pragma language glsl4\n" ..
-		love.filesystem.read("shaders/include/structs.glsl") ..
+		structsCode ..
+		trilinearCodeType("float") ..
+		trilinearCodeType("vec3") ..
 		love.filesystem.read("shaders/view.glsl")
 	)
 
@@ -273,11 +285,11 @@ function love.draw()
 	viewShader:send("clipToSky", {mat4.components(clipToSky)})
 	viewShader:send("cameraPosition", {vec3.components(camera.position)})
 	viewShader:send("BoxParticleData", boxParticleData)
-	viewShader:send("BoxArrayData", boxArrayData)
 	viewShader:send("boxSize", {vec3.components(consts.boxSize)})
 	viewShader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)})
 	viewShader:send("rayStepSize", 1)
 	viewShader:send("rayStepCount", 1024)
+	viewShader:send("nearestNeighbour", false)
 	love.graphics.draw(dummyTexture, 0, 0, 0, outputCanvas:getDimensions())
 	love.graphics.setShader()
 

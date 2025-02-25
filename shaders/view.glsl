@@ -32,43 +32,79 @@ readonly buffer BoxArrayData {
 uniform vec3 cameraPosition;
 uniform vec3 boxSize;
 uniform uvec3 worldSizeBoxes;
-
+uniform vec3 worldSize;
+uniform bool nearestNeighbour;
 uniform float rayStepSize;
 uniform uint rayStepCount;
 
 const float colourMultiplier = 5.0;
 
-const VolumetricSample emptySpace = VolumetricSample (
-	0.0,
-	0.0,
-	vec3(0.0),
-	vec3(0.0)
-);
-
-VolumetricSample sampleVolumetrics(vec3 position) {
+BoxParticleDataEntry getBoxParticleData(vec3 position) {
 	if (position.x < 0.0 || position.y < 0.0 || position.z < 0.0) {
-		return emptySpace;
+		return emptyBoxParticleData;
 	}
 	uvec3 boxCoords = uvec3(position / boxSize);
 	if (boxCoords.x >= worldSizeBoxes.x || boxCoords.y >= worldSizeBoxes.y || boxCoords.z >= worldSizeBoxes.z) {
-		return emptySpace;
+		return emptyBoxParticleData;
 	}
 	uint boxId =
 		boxCoords.x * worldSizeBoxes.x * worldSizeBoxes.y +
 		boxCoords.y * worldSizeBoxes.y +
 		boxCoords.z;
-	if (boxArrayData[boxId] == invalidBoxArrayDatum) {
-		return emptySpace; // Empty box, its data may be wrong
-	}
+	// Box data is set to usable empty data when empty so that we don't need to check here
+	// if (boxArrayData[boxId] == invalidBoxArrayDatum) {
+	// 	return emptyBoxParticleData; // Empty box
+	// }
+	return boxParticleData[boxId];
+}
 
-	BoxParticleDataEntry entry = boxParticleData[boxId];
-	float density = entry.totalMass / (boxSize.x * boxSize.y * boxSize.z);
-	
+VolumetricSample sampleVolumetricsNearestNeighbour(vec3 position) {
+	BoxParticleDataEntry entry = getBoxParticleData(position);
+
 	return VolumetricSample (
 		entry.scatterance,
 		entry.absorption,
 		entry.averageColour,
 		entry.emission
+	);
+}
+
+VolumetricSample sampleVolumetricsTrilinear(vec3 position) {
+	// Trilinear interpolation
+	vec3 positionUsable = position - boxSize * 0.5;
+	vec3 fractional = mod(positionUsable, boxSize) / boxSize;
+	vec4 swizzlableOffset = vec4(boxSize, 0.0); // Swizzle with xyz but replace components with w when not offset on that axis
+	// n is negative, p is positive
+	BoxParticleDataEntry nnn = getBoxParticleData(positionUsable + swizzlableOffset.www);
+	BoxParticleDataEntry nnp = getBoxParticleData(positionUsable + swizzlableOffset.wwz);
+	BoxParticleDataEntry npn = getBoxParticleData(positionUsable + swizzlableOffset.wyw);
+	BoxParticleDataEntry npp = getBoxParticleData(positionUsable + swizzlableOffset.wyz);
+	BoxParticleDataEntry pnn = getBoxParticleData(positionUsable + swizzlableOffset.xww);
+	BoxParticleDataEntry pnp = getBoxParticleData(positionUsable + swizzlableOffset.xwz);
+	BoxParticleDataEntry ppn = getBoxParticleData(positionUsable + swizzlableOffset.xyw);
+	BoxParticleDataEntry ppp = getBoxParticleData(positionUsable + swizzlableOffset.xyz);
+
+	return VolumetricSample (
+		trilinearMix(
+			nnn.scatterance, nnp.scatterance, npn.scatterance, npp.scatterance,
+			pnn.scatterance, pnp.scatterance, ppn.scatterance, ppp.scatterance,
+			fractional
+		),
+		trilinearMix(
+			nnn.absorption, nnp.absorption, npn.absorption, npp.absorption,
+			pnn.absorption, pnp.absorption, ppn.absorption, ppp.absorption,
+			fractional
+		),
+		trilinearMix(
+			nnn.averageColour, nnp.averageColour, npn.averageColour, npp.averageColour,
+			pnn.averageColour, pnp.averageColour, ppn.averageColour, ppp.averageColour,
+			fractional
+		),
+		trilinearMix(
+			nnn.emission, nnp.emission, npn.emission, npp.emission,
+			pnn.emission, pnp.emission, ppn.emission, ppp.emission,
+			fractional
+		)
 	);
 }
 
@@ -79,7 +115,9 @@ vec3 getRayColour(vec3 rayPosition, vec3 rayDirection) {
 		float t = rayStepSize * float(rayStep);
 		vec3 currentPosition = rayPosition + rayDirection * t;
 
-		VolumetricSample volumetricSample = sampleVolumetrics(currentPosition);
+		VolumetricSample volumetricSample = nearestNeighbour ?
+			sampleVolumetricsNearestNeighbour(currentPosition) :
+			sampleVolumetricsTrilinear(currentPosition);
 
 		float extinction = volumetricSample.absorption + volumetricSample.scatterance;
 

@@ -29,6 +29,8 @@ void computemain() {
 
 	uint thisBoxArrayStart = boxArrayData[boxId];
 	if (thisBoxArrayStart == invalidBoxArrayDatum) {
+		// Empty box
+		boxParticleData[boxId] = emptyBoxParticleData; // For rendering to not need to check emptiness
 		return;
 	}
 
