@@ -253,8 +253,9 @@ function love.update(dt)
 	stage5Shader:send("particleCount", consts.particleCount) -- In
 	stage5Shader:send("BoxArrayData", boxArrayData) -- In
 	stage5Shader:send("boxCount", consts.boxCount) -- In
-	stage5Shader:send("boxVolume", consts.boxSize.x * consts.boxSize.y * consts.boxSize.z)
-	stage5Shader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)})
+	stage5Shader:send("boxVolume", consts.boxSize.x * consts.boxSize.y * consts.boxSize.z) -- In
+	stage5Shader:send("boxSize", {vec3.components(consts.boxSize)}) -- In
+	stage5Shader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)}) -- In
 	stage5Shader:send("mass", massTexture) -- Out
 	stage5Shader:send("centreOfMass", centreOfMassTexture) -- Out
 	stage5Shader:send("scatterance", scatteranceTexture) -- Out

@@ -27,7 +27,8 @@ void computemain() {
 
 	Particle particle = particles[particleId];
 	vec3 position = particle.position + particle.velocity * dt;
-	vec3 positionClamped = clamp(position, vec3(0.0), worldSizeBoxes * boxSize);
+	vec3 bounceBoxReduction = boxSize / 2.0; // So that particles don't influence nonexistent boxes in coords outside of the space
+	vec3 positionClamped = clamp(position, bounceBoxReduction, worldSizeBoxes * boxSize - bounceBoxReduction);
 	particle.position = positionClamped;
 	if (positionClamped != position) {
 		vec3 normal = normalize(position - positionClamped);
