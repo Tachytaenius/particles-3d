@@ -37,7 +37,7 @@ void computemain() {
 	vec3 weightedPositionTotal = vec3(0.0);
 	float scatteranceCrossSectionTotal = 0.0;
 	float absorptionCrossSectionTotal = 0.0;
-	vec3 emissionCrossSectionTotal = vec3(0.0);
+	vec3 cloudEmissionCrossSectionTotal = vec3(0.0);
 	vec3 weightedColourTotal = vec3(0.0);
 
 	for (uint i = thisBoxArrayStart; i < particleCount; i++) { // Just to stop from going over particleCount, this is more likely to hit break
@@ -49,7 +49,7 @@ void computemain() {
 
 		massTotal += particle.mass;
 		weightedPositionTotal += particle.position * particle.mass;
-		emissionCrossSectionTotal += particle.emissionCrossSection;
+		cloudEmissionCrossSectionTotal += particle.cloudEmissionCrossSection;
 		scatteranceCrossSectionTotal += particle.scatteranceCrossSection;
 		absorptionCrossSectionTotal += particle.absorptionCrossSection;
 		weightedColourTotal += particle.colour * particle.mass;
@@ -84,6 +84,6 @@ void computemain() {
 		)
 	);
 	imageStore(emission, imageCoord,
-		vec4(emissionCrossSectionTotal / boxVolume, 1.0)
+		vec4(cloudEmissionCrossSectionTotal / boxVolume, 1.0)
 	);
 }

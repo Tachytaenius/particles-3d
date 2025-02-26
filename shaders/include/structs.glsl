@@ -4,10 +4,11 @@ struct Particle {
 	vec3 position;
 	vec3 velocity;
 	vec3 colour;
-	vec3 emissionCrossSection;
+	vec3 cloudEmissionCrossSection;
 	float scatteranceCrossSection;
 	float absorptionCrossSection;
 	float mass;
+	vec3 luminousFlux;
 };
 
 struct SortedParticleBoxId {
@@ -18,9 +19,7 @@ const uint invalidSortedParticleBoxId = 0xFFFFFFFF; // UINT32_MAX
 
 const uint invalidBoxArrayDatum = 0xFFFFFFFF; // UINT32_MAX
 
-struct VolumetricSample {
-	float scatterance;
-	float absorption;
-	vec3 colour;
-	vec3 emission;
+struct ParticleDrawDataEntry {
+	vec3 direction;
+	vec3 incomingLight;
 };

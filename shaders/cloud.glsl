@@ -21,15 +21,23 @@ vec4 position(mat4 loveTransform, vec4 vertexPosition) {
 
 #ifdef PIXEL
 
+uniform vec3 cameraPosition;
+uniform float rayStepSize;
+uniform uint rayStepCount;
+
+uniform vec3 worldSize;
+
 uniform sampler3D scatterance;
 uniform sampler3D absorption;
 uniform sampler3D averageColour;
 uniform sampler3D emission;
 
-uniform vec3 cameraPosition;
-uniform vec3 worldSize;
-uniform float rayStepSize;
-uniform uint rayStepCount;
+struct VolumetricSample {
+	float scatterance;
+	float absorption;
+	vec3 colour;
+	vec3 emission;
+};
 
 VolumetricSample sampleVolumetrics(vec3 position) {
 	vec3 textureCoords = position / worldSize;

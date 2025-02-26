@@ -15,7 +15,12 @@ local stage4Shader
 local stage5Shader
 local stage6Shader
 
-local viewShader
+local particleStarShader
+local cloudShader
+local pointShader
+local pointMesh
+local diskShader
+local diskMesh
 local dummyTexture
 local outputCanvas
 local camera
@@ -23,6 +28,7 @@ local camera
 local particleBufferA, particleBufferB
 local particleBoxIds, sortedParticleBoxIds
 local boxArrayData
+local particleDrawData
 
 local massTexture
 local centreOfMassTexture
@@ -55,6 +61,11 @@ function love.load()
 		debugname = "Box Array Data"
 	})
 
+	particleDrawData = love.graphics.newBuffer(consts.particleDrawDataFormat, consts.particleCount, {
+		shaderstorage = true,
+		debugname = "Particle Draw Data"
+	})
+
 	local function newBoxParticleDataTexture(format, debugName)
 		local canvas = love.graphics.newCanvas(consts.worldWidthBoxes, consts.worldHeightBoxes, consts.worldDepthBoxes, {
 			type = "volume",
@@ -62,8 +73,7 @@ function love.load()
 			computewrite = true,
 			debugname = debugName
 		})
-		canvas:setFilter("linear", "linear")
-		-- canvas:setFilter("nearest", "nearest")
+		canvas:setFilter(consts.boxParticleDataCanvasFilter)
 		canvas:setWrap("clampzero", "clampzero", "clampzero")
 		return canvas
 	end
@@ -89,21 +99,33 @@ function love.load()
 	stage5Shader = stage(5)
 	stage6Shader = stage(6)
 
-	local trilinearCode = love.filesystem.read("shaders/include/trilinearMix.glsl")
-	local function trilinearCodeType(typeName)
-		return
-			"#define TYPE " .. typeName .. "\n" ..
-			trilinearCode ..
-			"#undef TYPE\n"
-	end
-
-	viewShader = love.graphics.newShader(
+	particleStarShader = love.graphics.newComputeShader(
 		"#pragma language glsl4\n" ..
 		structsCode ..
-		trilinearCodeType("float") ..
-		trilinearCodeType("vec3") ..
-		love.filesystem.read("shaders/view.glsl")
+		love.filesystem.read("shaders/particleStar.glsl")
 	)
+
+	cloudShader = love.graphics.newShader(
+		"#pragma language glsl4\n" ..
+		structsCode ..
+		love.filesystem.read("shaders/cloud.glsl")
+	)
+
+	pointShader = love.graphics.newShader(
+		"#pragma language glsl4\n" ..
+		structsCode ..
+		love.filesystem.read("shaders/point.glsl")
+	)
+
+	pointMesh = love.graphics.newMesh(consts.particleMeshFormat, consts.particleCount, "points")
+
+	diskShader = love.graphics.newShader(
+		"#pragma language glsl4\n" ..
+		structsCode ..
+		love.filesystem.read("shaders/disk.glsl"),
+		{defines = {INSTANCED = true}}
+	)
+	diskMesh = util.generateDiskMesh(consts.starDiskVertices)
 
 	dummyTexture = love.graphics.newImage(love.image.newImageData(1, 1))
 
@@ -133,21 +155,27 @@ function love.load()
 		local mass = love.math.random() ^ 5 * 8
 
 		local function emissionChannel()
-			return love.math.random() * 32
+			return love.math.random() * 4
 		end
-		local emissionCrossSection = {emissionChannel(), emissionChannel(), emissionChannel()} -- Linear space
+		local cloudEmissionCrossSection = {emissionChannel(), emissionChannel(), emissionChannel()} -- Linear space
 
-		local scatteranceCrossSection = love.math.random() * 5
-		local absorptionCrossSection = love.math.random() * 2
+		local function fluxChannel()
+			return love.math.random() * 6
+		end
+		local luminousFlux = {fluxChannel(), fluxChannel(), fluxChannel()}
+
+		local scatteranceCrossSection = love.math.random() * 10
+		local absorptionCrossSection = love.math.random() * 10
 
 		particleData[i] = {
 			position.x, position.y, position.z,
 			velocity.x, velocity.y, velocity.z,
 			colour[1], colour[2], colour[3],
-			emissionCrossSection[1], emissionCrossSection[2], emissionCrossSection[3],
+			cloudEmissionCrossSection[1], cloudEmissionCrossSection[2], cloudEmissionCrossSection[3],
 			scatteranceCrossSection,
 			absorptionCrossSection,
-			mass
+			mass,
+			luminousFlux[1], luminousFlux[2], luminousFlux[3]
 		}
 	end
 	particleBufferB:setArrayData(particleData) -- Gets swapped immediately
@@ -310,18 +338,67 @@ function love.draw()
 	local worldToClip = cameraToClip * worldToCamera
 	local clipToSky = mat4.inverse(cameraToClip * worldToCameraStationary)
 
-	love.graphics.setShader(viewShader)
-	viewShader:send("clipToSky", {mat4.components(clipToSky)})
-	viewShader:send("cameraPosition", {vec3.components(camera.position)})
-	viewShader:send("scatterance", scatteranceTexture)
-	viewShader:send("absorption", absorptionTexture)
-	viewShader:send("averageColour", averageColourTexture)
-	viewShader:send("emission", emissionTexture)
-	viewShader:send("worldSize", {vec3.components(consts.worldSize)})
-	viewShader:send("rayStepSize", consts.rayStepSize)
-	viewShader:send("rayStepCount", consts.rayStepCount)
+	particleStarShader:send("Particles", particleBufferB) -- In
+	particleStarShader:send("particleCount", consts.particleCount) -- In
+	particleStarShader:send("cameraPosition", {vec3.components(camera.position)}) -- In
+ 	particleStarShader:send("scatterance", scatteranceTexture) -- In
+	particleStarShader:send("absorption", absorptionTexture) -- In
+	particleStarShader:send("rayStepCount", consts.extinctionRayStepCount) -- In
+	particleStarShader:send("worldSize", {vec3.components(consts.worldSize)}) -- In
+	particleStarShader:send("diskSolidAngle", consts.starDiskSolidAngle)
+	particleStarShader:send("ParticleDrawData", particleDrawData) -- Out
+	love.graphics.dispatchThreadgroups(particleStarShader,
+		math.ceil(consts.particleCount / particleStarShader:getLocalThreadgroupSize())
+	)
+
+	love.graphics.setShader(cloudShader)
+	cloudShader:send("clipToSky", {mat4.components(clipToSky)})
+	cloudShader:send("cameraPosition", {vec3.components(camera.position)})
+	cloudShader:send("scatterance", scatteranceTexture)
+	cloudShader:send("absorption", absorptionTexture)
+	cloudShader:send("averageColour", averageColourTexture)
+	cloudShader:send("worldSize", {vec3.components(consts.worldSize)})
+	cloudShader:send("emission", emissionTexture)
+	cloudShader:send("rayStepSize", consts.rayStepSize)
+	cloudShader:send("rayStepCount", consts.rayStepCount)
 	love.graphics.draw(dummyTexture, 0, 0, 0, outputCanvas:getDimensions())
+
+	love.graphics.setBlendMode("add")
+
+	if consts.starDrawType == "points" then
+		love.graphics.setShader(pointShader)
+		pointShader:send("Particles", particleBufferB)
+		pointShader:send("pointSize", consts.pointShaderPointSize)
+		pointShader:send("ParticleDrawData", particleDrawData)
+		pointShader:send("worldToClip", {mat4.components(worldToClip)})
+		love.graphics.draw(pointMesh)
+	elseif consts.starDrawType == "disks" then
+		local cameraToClipDisk = mat4.perspectiveLeftHanded(
+			outputCanvas:getWidth() / outputCanvas:getHeight(),
+			camera.verticalFOV,
+			1.5,
+			0.5
+		)
+		local worldToClipDisk = cameraToClipDisk * mat4.camera(vec3(), camera.orientation)
+		local diskDistanceToSphere = 1 - math.cos(consts.starDiskAngularRadius)
+		local scaleToGetAngularRadius = math.tan(consts.starDiskAngularRadius)
+		local cameraUp = vec3.rotate(consts.upVector, camera.orientation)
+		local cameraRight = vec3.rotate(consts.rightVector, camera.orientation)
+		diskShader:send("diskDistanceToSphere", diskDistanceToSphere)
+		diskShader:send("scale", scaleToGetAngularRadius)
+		diskShader:send("vertexFadePower", consts.starDiskFadePower)
+		diskShader:send("cameraUp", {vec3.components(cameraUp)})
+		diskShader:send("cameraRight", {vec3.components(cameraRight)})
+		diskShader:send("ParticleDrawData", particleDrawData)
+		diskShader:send("worldToClip", {mat4.components(worldToClipDisk)})
+		love.graphics.setShader(diskShader)
+		love.graphics.drawInstanced(diskMesh, consts.particleCount)
+	else
+		error("Unknown star draw type " .. consts.starDrawType)
+	end
 	love.graphics.setShader()
+
+	love.graphics.setBlendMode("alpha")
 
 	love.graphics.setCanvas()
 	love.graphics.draw(outputCanvas)

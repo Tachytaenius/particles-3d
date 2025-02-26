@@ -8,10 +8,11 @@ consts.particleFormat = {
 	{name = "position", format = "floatvec3"},
 	{name = "velocity", format = "floatvec3"},
 	{name = "colour", format = "floatvec3"},
-	{name = "emissionCrossSection", format = "floatvec3"},
+	{name = "cloudEmissionCrossSection", format = "floatvec3"},
 	{name = "scatteranceCrossSection", format = "float"},
 	{name = "absorptionCrossSection", format = "float"},
-	{name = "mass", format = "float"}
+	{name = "mass", format = "float"},
+	{name = "luminousFlux", format = "floatvec3"}
 }
 
 consts.particleBoxIdFormat = {
@@ -27,9 +28,23 @@ consts.boxArrayEntryFormat = {
 	{name = "start", format = "uint32"}
 }
 
-consts.boxWidth = 16
-consts.boxHeight = 16
-consts.boxDepth = 16
+consts.particleDrawDataFormat = {
+	{name = "direction", format = "floatvec3"},
+	{name = "incomingLight", format = "floatvec3"}
+}
+
+consts.particleMeshFormat = {
+	{name = "VertexPosition", location = 0, format = "float"} -- Dummy
+}
+
+consts.diskMeshFormat = {
+	{name = "VertexPosition", location = 0, format = "floatvec2"},
+	{name = "VertexFade", location = 1, format = "float"}
+}
+
+consts.boxWidth = 8
+consts.boxHeight = 8
+consts.boxDepth = 8
 
 consts.worldWidthBoxes = 32
 consts.worldHeightBoxes = 32
@@ -42,12 +57,23 @@ consts.worldSizeBoxes = vec3(consts.worldWidthBoxes, consts.worldHeightBoxes, co
 consts.worldSize = consts.boxSize * consts.worldSizeBoxes
 
 consts.particleCount = 10000
-consts.startNoiseFrequency = 10
-consts.startNoiseAmplitude = 8
+consts.startNoiseFrequency = 1/100
+consts.startNoiseAmplitude = 120
 consts.startVelocityRadius = 0.01
 
+consts.boxParticleDataCanvasFilter = "linear"
 consts.rayStepSize = 8
 consts.rayStepCount = 120
+consts.extinctionRayStepCount = 100
+
+consts.starDrawType = "disks" -- "points" or "disks"
+consts.starDiskVertices = 8
+consts.starDiskFadePower = 4
+consts.starDiskAngularRadius = 0.005
+consts.pointShaderPointSize = 2 -- TODO: Make this be a good fit derived from starDiskAngularRadius
+
+-- Derived
+consts.starDiskSolidAngle = consts.tau * (1 - math.cos(consts.starDiskAngularRadius))
 
 consts.gravityStrength = 1 -- Gravitational constant
 
