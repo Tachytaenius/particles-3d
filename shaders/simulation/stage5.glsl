@@ -52,8 +52,6 @@ void computemain() {
 		weightedPositionTotal += particle.position * particle.mass;
 	}
 
-	// TODO: Fix inaccuracies if a particle position axis is in box centre?
-
 	float scatteranceCrossSectionTotal = 0.0;
 	float absorptionCrossSectionTotal = 0.0;
 	vec3 cloudEmissionCrossSectionTotal = vec3(0.0);

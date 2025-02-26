@@ -276,7 +276,6 @@ function love.update(dt)
 	stage6Shader:send("BoxArrayData", boxArrayData) -- In
 	stage6Shader:send("mass", massTexture) -- In
 	stage6Shader:send("centreOfMass", centreOfMassTexture) -- In
-	stage6Shader:send("boxCount", consts.boxCount) -- In
 	stage6Shader:send("ParticlesOut", particleBufferB) -- Out
 	love.graphics.dispatchThreadgroups(stage6Shader,
 		math.ceil(consts.particleCount / stage6Shader:getLocalThreadgroupSize())
