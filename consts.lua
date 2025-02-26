@@ -57,13 +57,13 @@ consts.worldSizeBoxes = vec3(consts.worldWidthBoxes, consts.worldHeightBoxes, co
 consts.worldSize = consts.boxSize * consts.worldSizeBoxes
 
 consts.particleCount = 5000
-consts.startNoiseFrequency = 1/100
-consts.startNoiseAmplitude = 120
+consts.startNoiseFrequency = 1/50
+consts.startNoiseAmplitude = 50
 consts.startVelocityRadius = 0.01
 
 consts.boxParticleDataCanvasFilter = "linear"
-consts.rayStepSize = 8
-consts.rayStepCount = 120
+consts.rayStepSize = 6
+consts.rayStepCount = 160
 consts.extinctionRayStepCount = 100
 
 consts.starDrawType = "disks" -- "points" or "disks"

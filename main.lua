@@ -133,7 +133,7 @@ function love.load()
 
 	local particleData = {}
 	for i = 1, consts.particleCount do
-		local position = (vec3(love.math.random(), love.math.random(), love.math.random()) * 0.5 + 0.25) * consts.worldSize
+		local position = consts.worldSize / 2 + util.randomInSphereVolume(0.4) * consts.worldSize
 		local function axis(w)
 			return (love.math.simplexNoise(
 				position.x * consts.startNoiseFrequency,
@@ -154,17 +154,17 @@ function love.load()
 
 		local mass = love.math.random() ^ 5 * 8
 
-		-- local function emissionChannel()
-		-- 	return love.math.random() * 4
-		-- end
-		-- local cloudEmissionCrossSection = {emissionChannel(), emissionChannel(), emissionChannel()} -- Linear space
 		local cloudEmissionCrossSection = {4, 1, 3} -- Linear space
+		local function emissionChannel()
+			return love.math.random() * 4
+		end
+		-- local cloudEmissionCrossSection = {emissionChannel(), emissionChannel(), emissionChannel()} -- Linear space
 
-		-- local function fluxChannel()
-		-- 	return love.math.random() * 6
-		-- end
-		-- local luminousFlux = {fluxChannel(), fluxChannel(), fluxChannel()} -- Linear space
 		local luminousFlux = {6, 5, 1} -- Linear space
+		local function fluxChannel()
+			return love.math.random() * 6
+		end
+		-- local luminousFlux = {fluxChannel(), fluxChannel(), fluxChannel()} -- Linear space
 
 		local scatteranceCrossSection = love.math.random() * 10
 		local absorptionCrossSection = love.math.random() * 10
