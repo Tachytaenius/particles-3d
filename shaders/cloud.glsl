@@ -52,9 +52,10 @@ VolumetricSample sampleVolumetrics(vec3 position) {
 vec3 getRayColour(vec3 rayPosition, vec3 rayDirection) {
 	vec3 totalRayLight = vec3(0.0);
 	float totalTransmittance = 1.0;
+	float rayLength = rayStepSize * float(rayStepCount);
 	for (uint rayStep = 0; rayStep < rayStepCount; rayStep++) {
-		float t = rayStepSize * float(rayStep);
-		vec3 currentPosition = rayPosition + rayDirection * t;
+		float t = rayLength - rayStepSize * (float(rayStep) + 0.5); // Move backwards, sample in the middle of each line segment
+		vec3 currentPosition = rayPosition + rayDirection * t; // t goes from 0 to rayLength
 
 		VolumetricSample volumetricSample = sampleVolumetrics(currentPosition);
 

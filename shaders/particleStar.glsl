@@ -49,8 +49,8 @@ void computemain() {
 	float totalTransmittance = 1.0;
 	float stepSize = dist / float(rayStepCount);
 	for (uint i = 0; i < rayStepCount; i++) {
-		float t = i / float(rayStepCount - 1);
-		vec3 samplePosition = mix(cameraPosition, particle.position, t);
+		float t = 1.0 - (i + 0.5) / float(rayStepCount); // Move backwards, sample in the middle of each line segment
+		vec3 samplePosition = mix(cameraPosition, particle.position, t); // t goes from 0 to 1
 		VolumetricSample dustSample = sampleVolumetrics(samplePosition);
 		float extinction = dustSample.absorption + dustSample.scatterance;
 		float transmittanceThisStep = exp(-extinction * stepSize);
