@@ -56,7 +56,7 @@ consts.boxSize = vec3(consts.boxWidth, consts.boxHeight, consts.boxDepth)
 consts.worldSizeBoxes = vec3(consts.worldWidthBoxes, consts.worldHeightBoxes, consts.worldDepthBoxes)
 consts.worldSize = consts.boxSize * consts.worldSizeBoxes
 
-consts.particleCount = 10000
+consts.particleCount = 5000
 consts.startNoiseFrequency = 1/100
 consts.startNoiseAmplitude = 120
 consts.startVelocityRadius = 0.01

@@ -133,7 +133,7 @@ function love.load()
 
 	local particleData = {}
 	for i = 1, consts.particleCount do
-		local position = vec3(love.math.random(), love.math.random(), love.math.random()) * consts.worldSize
+		local position = (vec3(love.math.random(), love.math.random(), love.math.random()) * 0.5 + 0.25) * consts.worldSize
 		local function axis(w)
 			return (love.math.simplexNoise(
 				position.x * consts.startNoiseFrequency,
