@@ -154,15 +154,17 @@ function love.load()
 
 		local mass = love.math.random() ^ 5 * 8
 
-		local function emissionChannel()
-			return love.math.random() * 4
-		end
-		local cloudEmissionCrossSection = {emissionChannel(), emissionChannel(), emissionChannel()} -- Linear space
+		-- local function emissionChannel()
+		-- 	return love.math.random() * 4
+		-- end
+		-- local cloudEmissionCrossSection = {emissionChannel(), emissionChannel(), emissionChannel()} -- Linear space
+		local cloudEmissionCrossSection = {4, 1, 3} -- Linear space
 
-		local function fluxChannel()
-			return love.math.random() * 6
-		end
-		local luminousFlux = {fluxChannel(), fluxChannel(), fluxChannel()}
+		-- local function fluxChannel()
+		-- 	return love.math.random() * 6
+		-- end
+		-- local luminousFlux = {fluxChannel(), fluxChannel(), fluxChannel()} -- Linear space
+		local luminousFlux = {6, 5, 1} -- Linear space
 
 		local scatteranceCrossSection = love.math.random() * 10
 		local absorptionCrossSection = love.math.random() * 10
