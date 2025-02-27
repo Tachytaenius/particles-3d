@@ -8,12 +8,12 @@ local mat4 = mathsies.mat4
 
 local consts = require("consts")
 
-local stage1Shader
-local stage2Shader
-local stage3Shader
-local stage4Shader
-local stage5Shader
-local stage6Shader
+local particlePositionsShader
+local sortParticleBoxIdsShader
+local clearBoxArrayDataShader
+local setBoxArrayDataShader
+local setBoxParticleDataShader
+local particleAccelerationShader
 
 local particleStarShader
 local cloudShader
@@ -86,43 +86,42 @@ function love.load()
 
 	local structsCode = love.filesystem.read("shaders/include/structs.glsl")
 
-	local function stage(number)
+	local function stage(name)
 		return love.graphics.newComputeShader(
 			structsCode ..
-			love.filesystem.read("shaders/simulation/stage" .. number .. ".glsl")
+			love.filesystem.read("shaders/simulation/" .. name .. ".glsl")
 		)
 	end
-	stage1Shader = stage(1)
-	stage2Shader = stage(2)
-	stage3Shader = stage(3)
-	stage4Shader = stage(4)
-	stage5Shader = stage(5)
-	stage6Shader = stage(6)
+	particlePositionsShader = stage("particlePositions")
+	sortParticleBoxIdsShader = stage("sortParticleBoxIds")
+	clearBoxArrayDataShader = stage("clearBoxArrayData")
+	setBoxArrayDataShader = stage("setBoxArrayData")
+	setBoxParticleDataShader = stage("setBoxParticleData")
+	particleAccelerationShader = stage("particleAcceleration")
 
 	particleStarShader = love.graphics.newComputeShader(
 		"#pragma language glsl4\n" ..
 		structsCode ..
-		love.filesystem.read("shaders/particleStar.glsl")
+		love.filesystem.read("shaders/drawing/particleStar.glsl")
 	)
 
 	cloudShader = love.graphics.newShader(
 		"#pragma language glsl4\n" ..
 		structsCode ..
-		love.filesystem.read("shaders/cloud.glsl")
+		love.filesystem.read("shaders/drawing/cloud.glsl")
 	)
 
 	pointShader = love.graphics.newShader(
 		"#pragma language glsl4\n" ..
 		structsCode ..
-		love.filesystem.read("shaders/point.glsl")
+		love.filesystem.read("shaders/drawing/point.glsl")
 	)
-
 	pointMesh = love.graphics.newMesh(consts.particleMeshFormat, consts.particleCount, "points")
 
 	diskShader = love.graphics.newShader(
 		"#pragma language glsl4\n" ..
 		structsCode ..
-		love.filesystem.read("shaders/disk.glsl"),
+		love.filesystem.read("shaders/drawing/disk.glsl"),
 		{defines = {INSTANCED = true}}
 	)
 	diskMesh = util.generateDiskMesh(consts.starDiskVertices)
@@ -206,28 +205,28 @@ end
 function love.update(dt)
 	particleBufferA, particleBufferB = particleBufferB, particleBufferA
 
-	stage1Shader:send("particleCount", consts.particleCount) -- In
-	stage1Shader:send("dt", dt) -- In
-	stage1Shader:send("boxSize", {consts.boxWidth, consts.boxHeight, consts.boxDepth})
-	stage1Shader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)})
-	stage1Shader:send("Particles", particleBufferA) -- In/out
-	stage1Shader:send("ParticleBoxIds", particleBoxIds) -- Out
-	stage1Shader:send("ParticleBoxIdsToSort", sortedParticleBoxIds) -- Out
-	love.graphics.dispatchThreadgroups(stage1Shader,
-		math.ceil(consts.particleCount / stage1Shader:getLocalThreadgroupSize())
+	particlePositionsShader:send("particleCount", consts.particleCount) -- In
+	particlePositionsShader:send("dt", dt) -- In
+	particlePositionsShader:send("boxSize", {consts.boxWidth, consts.boxHeight, consts.boxDepth})
+	particlePositionsShader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)})
+	particlePositionsShader:send("Particles", particleBufferA) -- In/out
+	particlePositionsShader:send("ParticleBoxIds", particleBoxIds) -- Out
+	particlePositionsShader:send("ParticleBoxIdsToSort", sortedParticleBoxIds) -- Out
+	love.graphics.dispatchThreadgroups(particlePositionsShader,
+		math.ceil(consts.particleCount / particlePositionsShader:getLocalThreadgroupSize())
 	)
 
-	stage2Shader:send("ParticleBoxIdsToSort", sortedParticleBoxIds) -- In/out
+	sortParticleBoxIdsShader:send("ParticleBoxIdsToSort", sortedParticleBoxIds) -- In/out
 	local level = 2
 	while level <= consts.sortedParticleBoxIdBufferSize do
-		stage2Shader:send("level", level) -- In
+		sortParticleBoxIdsShader:send("level", level) -- In
 		local stage = math.floor(level / 2) -- Within stage 2
 		while stage > 0 do
-			stage2Shader:send("stage", stage) -- In
-			love.graphics.dispatchThreadgroups(stage2Shader,
+			sortParticleBoxIdsShader:send("stage", stage) -- In
+			love.graphics.dispatchThreadgroups(sortParticleBoxIdsShader,
 				math.ceil(
 					math.floor(consts.sortedParticleBoxIdBufferSize / 2) /
-					stage2Shader:getLocalThreadgroupSize()
+					sortParticleBoxIdsShader:getLocalThreadgroupSize()
 				)
 			)
 			stage = math.floor(stage / 2)
@@ -235,50 +234,50 @@ function love.update(dt)
 		level = level * 2
 	end
 
-	stage3Shader:send("boxCount", consts.boxCount) -- In
-	stage3Shader:send("BoxArrayData", boxArrayData) -- Out
-	love.graphics.dispatchThreadgroups(stage3Shader,
-		math.ceil(consts.boxCount / stage3Shader:getLocalThreadgroupSize())
+	clearBoxArrayDataShader:send("boxCount", consts.boxCount) -- In
+	clearBoxArrayDataShader:send("BoxArrayData", boxArrayData) -- Out
+	love.graphics.dispatchThreadgroups(clearBoxArrayDataShader,
+		math.ceil(consts.boxCount / clearBoxArrayDataShader:getLocalThreadgroupSize())
 	)
 
-	stage4Shader:send("SortedParticleBoxIds", sortedParticleBoxIds) -- In
-	stage4Shader:send("particleCount", consts.particleCount) -- In
-	stage4Shader:send("BoxArrayData", boxArrayData) -- Out
-	love.graphics.dispatchThreadgroups(stage4Shader,
-		math.ceil(consts.particleCount / stage4Shader:getLocalThreadgroupSize())
+	setBoxArrayDataShader:send("SortedParticleBoxIds", sortedParticleBoxIds) -- In
+	setBoxArrayDataShader:send("particleCount", consts.particleCount) -- In
+	setBoxArrayDataShader:send("BoxArrayData", boxArrayData) -- Out
+	love.graphics.dispatchThreadgroups(setBoxArrayDataShader,
+		math.ceil(consts.particleCount / setBoxArrayDataShader:getLocalThreadgroupSize())
 	)
 
-	stage5Shader:send("SortedParticleBoxIds", sortedParticleBoxIds) -- In
-	stage5Shader:send("Particles", particleBufferA) -- In
-	stage5Shader:send("particleCount", consts.particleCount) -- In
-	stage5Shader:send("BoxArrayData", boxArrayData) -- In
-	stage5Shader:send("boxCount", consts.boxCount) -- In
-	stage5Shader:send("boxVolume", consts.boxSize.x * consts.boxSize.y * consts.boxSize.z) -- In
-	stage5Shader:send("boxSize", {vec3.components(consts.boxSize)}) -- In
-	stage5Shader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)}) -- In
-	stage5Shader:send("mass", massTexture) -- Out
-	stage5Shader:send("centreOfMass", centreOfMassTexture) -- Out
-	stage5Shader:send("scatterance", scatteranceTexture) -- Out
-	stage5Shader:send("absorption", absorptionTexture) -- Out
-	stage5Shader:send("averageColour", averageColourTexture) -- Out
-	stage5Shader:send("emission", emissionTexture) -- Out
-	love.graphics.dispatchThreadgroups(stage5Shader,
-		math.ceil(consts.boxCount / stage5Shader:getLocalThreadgroupSize())
+	setBoxParticleDataShader:send("SortedParticleBoxIds", sortedParticleBoxIds) -- In
+	setBoxParticleDataShader:send("Particles", particleBufferA) -- In
+	setBoxParticleDataShader:send("particleCount", consts.particleCount) -- In
+	setBoxParticleDataShader:send("BoxArrayData", boxArrayData) -- In
+	setBoxParticleDataShader:send("boxCount", consts.boxCount) -- In
+	setBoxParticleDataShader:send("boxVolume", consts.boxSize.x * consts.boxSize.y * consts.boxSize.z) -- In
+	setBoxParticleDataShader:send("boxSize", {vec3.components(consts.boxSize)}) -- In
+	setBoxParticleDataShader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)}) -- In
+	setBoxParticleDataShader:send("mass", massTexture) -- Out
+	setBoxParticleDataShader:send("centreOfMass", centreOfMassTexture) -- Out
+	setBoxParticleDataShader:send("scatterance", scatteranceTexture) -- Out
+	setBoxParticleDataShader:send("absorption", absorptionTexture) -- Out
+	setBoxParticleDataShader:send("averageColour", averageColourTexture) -- Out
+	setBoxParticleDataShader:send("emission", emissionTexture) -- Out
+	love.graphics.dispatchThreadgroups(setBoxParticleDataShader,
+		math.ceil(consts.boxCount / setBoxParticleDataShader:getLocalThreadgroupSize())
 	)
 
-	stage6Shader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)})
-	stage6Shader:send("particleCount", consts.particleCount) -- In
-	stage6Shader:send("ParticlesIn", particleBufferA) -- In
-	stage6Shader:send("gravityStrength", consts.gravityStrength) -- In
-	stage6Shader:send("dt", dt) -- In
-	stage6Shader:send("ParticleBoxIds", particleBoxIds) -- In
-	stage6Shader:send("SortedParticleBoxIds", sortedParticleBoxIds) -- In
-	stage6Shader:send("BoxArrayData", boxArrayData) -- In
-	stage6Shader:send("mass", massTexture) -- In
-	stage6Shader:send("centreOfMass", centreOfMassTexture) -- In
-	stage6Shader:send("ParticlesOut", particleBufferB) -- Out
-	love.graphics.dispatchThreadgroups(stage6Shader,
-		math.ceil(consts.particleCount / stage6Shader:getLocalThreadgroupSize())
+	particleAccelerationShader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)})
+	particleAccelerationShader:send("particleCount", consts.particleCount) -- In
+	particleAccelerationShader:send("ParticlesIn", particleBufferA) -- In
+	particleAccelerationShader:send("gravityStrength", consts.gravityStrength) -- In
+	particleAccelerationShader:send("dt", dt) -- In
+	particleAccelerationShader:send("ParticleBoxIds", particleBoxIds) -- In
+	particleAccelerationShader:send("SortedParticleBoxIds", sortedParticleBoxIds) -- In
+	particleAccelerationShader:send("BoxArrayData", boxArrayData) -- In
+	particleAccelerationShader:send("mass", massTexture) -- In
+	particleAccelerationShader:send("centreOfMass", centreOfMassTexture) -- In
+	particleAccelerationShader:send("ParticlesOut", particleBufferB) -- Out
+	love.graphics.dispatchThreadgroups(particleAccelerationShader,
+		math.ceil(consts.particleCount / particleAccelerationShader:getLocalThreadgroupSize())
 	)
 
 	local translation = vec3()
