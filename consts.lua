@@ -45,13 +45,13 @@ function consts.load() -- Avoiding circular dependencies
 		{name = "VertexFade", location = 1, format = "float"}
 	}
 
-	consts.boxWidth = 8
-	consts.boxHeight = 8
-	consts.boxDepth = 8
+	consts.boxWidth = 4
+	consts.boxHeight = 4
+	consts.boxDepth = 4
 
-	consts.worldWidthBoxes = 32
-	consts.worldHeightBoxes = 32
-	consts.worldDepthBoxes = 32
+	consts.worldWidthBoxes = 64
+	consts.worldHeightBoxes = 64
+	consts.worldDepthBoxes = 64
 	assert( -- TEMP? Would need more advanced manual mipmapping
 		util.isPowerOfTwo(consts.worldWidthBoxes) and
 		util.isPowerOfTwo(consts.worldHeightBoxes) and
@@ -69,9 +69,9 @@ function consts.load() -- Avoiding circular dependencies
 
 	consts.simulationBoxRange = 1 -- 3x3x3, offsets iterate from -range to range inclusive
 
-	consts.particleCount = 5000
-	consts.startNoiseFrequency = 1/50
-	consts.startNoiseAmplitude = 50
+	consts.particleCount = 20000
+	consts.startDensityNoiseFrequency = 1 / 64
+	consts.startColourNoiseFrequency = 1 / 32
 	consts.startVelocityRadius = 0.01
 
 	consts.volumetricsCanvasFilter = "linear"
@@ -89,6 +89,7 @@ function consts.load() -- Avoiding circular dependencies
 	consts.starDiskSolidAngle = consts.tau * (1 - math.cos(consts.starDiskAngularRadius))
 
 	consts.gravityStrength = 1 -- Gravitational constant
+	consts.gravitySoftening = 0.5
 
 	-- Derived
 	consts.sortedParticleBoxIdBufferSize = util.nextPowerOfTwo(consts.particleCount)

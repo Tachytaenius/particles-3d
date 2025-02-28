@@ -28,6 +28,7 @@ uniform int boxRange;
 uniform uvec3 worldSizeBoxes;
 uniform float dt;
 uniform float gravityStrength;
+uniform float softening;
 
 vec3 getAccelerationWithoutStrength(float mass, vec3 relativePosition) {
 	float dist = length(relativePosition);
@@ -35,7 +36,7 @@ vec3 getAccelerationWithoutStrength(float mass, vec3 relativePosition) {
 		return vec3(0.0);
 	}
 	vec3 direction = normalize(relativePosition);
-	return direction * mass * pow(max(dist, 0.01), -2.0);
+	return direction * mass / (dist * dist + softening * softening);
 }
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
