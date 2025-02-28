@@ -1,18 +1,20 @@
 local util = require("util")
 util.load()
 
+local consts = require("consts")
+consts.load() -- Avoiding circular dependencies
+
 local mathsies = require("lib.mathsies")
 local vec3 = mathsies.vec3
 local quat = mathsies.quat
 local mat4 = mathsies.mat4
-
-local consts = require("consts")
 
 local particlePositionsShader
 local sortParticleBoxIdsShader
 local clearBoxArrayDataShader
 local setBoxArrayDataShader
 local setBoxParticleDataShader
+local generateMipmapsShader
 local particleAccelerationShader
 
 local particleStarShader
@@ -36,6 +38,8 @@ local scatteranceTexture
 local absorptionTexture
 local averageColourTexture
 local emissionTexture
+
+local boxParticleDataViews
 
 function love.load()
 	particleBufferA = love.graphics.newBuffer(consts.particleFormat, consts.particleCount, {
@@ -66,23 +70,40 @@ function love.load()
 		debugname = "Particle Draw Data"
 	})
 
-	local function newBoxParticleDataTexture(format, debugName)
+	boxParticleDataViews = {}
+	local function newBoxParticleDataTexture(name, format, mipmaps, volumetrics, debugName)
 		local canvas = love.graphics.newCanvas(consts.worldWidthBoxes, consts.worldHeightBoxes, consts.worldDepthBoxes, {
 			type = "volume",
 			format = format,
 			computewrite = true,
+			mipmaps = mipmaps and "manual" or nil,
 			debugname = debugName
 		})
-		canvas:setFilter(consts.boxParticleDataCanvasFilter)
+		canvas:setFilter(volumetrics and consts.volumetricsCanvasFilter or "nearest")
 		canvas:setWrap("clampzero", "clampzero", "clampzero")
+		if mipmaps then
+			local viewSet = {}
+
+			local _, frexpResult = math.frexp(consts.worldSizeBoxes.x) -- Sizes should be the same. Also should be 1 more than the base 2 logarithm of box count along each axis (math.log(consts.worldSizeBoxes.x, 2)), but I don't trust float imprecision
+			assert(canvas:getMipmapCount() == frexpResult, "Wrong number of mipmaps...?")
+
+			for i = 1, canvas:getMipmapCount() do
+				viewSet[i] = love.graphics.newTextureView(canvas, {
+					mipmapstart = i,
+					mipmapcount = 1,
+					debugname = debugName .. " View " .. i
+				})
+			end
+			boxParticleDataViews[name] = viewSet
+		end
 		return canvas
 	end
-	massTexture = newBoxParticleDataTexture("r32f", "Mass Texture")
-	centreOfMassTexture = newBoxParticleDataTexture("rgba32f", "Centre of Mass Texture") -- Alpha is unused
-	scatteranceTexture = newBoxParticleDataTexture("r32f", "Scatterance Texture")
-	absorptionTexture = newBoxParticleDataTexture("r32f", "Absorption Texture")
-	averageColourTexture = newBoxParticleDataTexture("rgba32f", "Average Colour Texture") -- Alpha is unused
-	emissionTexture = newBoxParticleDataTexture("rgba32f", "Emission Texture") -- Alpha is unused
+	massTexture = newBoxParticleDataTexture("mass", "r32f", true, false, "Mass Texture")
+	centreOfMassTexture = newBoxParticleDataTexture("centreOfMass", "rgba32f", true, false, "Centre of Mass Texture") -- Alpha is unused
+	scatteranceTexture = newBoxParticleDataTexture("scatterance", "r32f", false, true, "Scatterance Texture")
+	absorptionTexture = newBoxParticleDataTexture("absorption", "r32f", false, true, "Absorption Texture")
+	averageColourTexture = newBoxParticleDataTexture("averageColour", "rgba32f", false, true, "Average Colour Texture") -- Alpha is unused
+	emissionTexture = newBoxParticleDataTexture("emission", "rgba32f", false, true, "Emission Texture") -- Alpha is unused
 
 	local structsCode = love.filesystem.read("shaders/include/structs.glsl")
 
@@ -97,6 +118,7 @@ function love.load()
 	clearBoxArrayDataShader = stage("clearBoxArrayData")
 	setBoxArrayDataShader = stage("setBoxArrayData")
 	setBoxParticleDataShader = stage("setBoxParticleData")
+	generateMipmapsShader = stage("generateMipmaps")
 	particleAccelerationShader = stage("particleAcceleration")
 
 	particleStarShader = love.graphics.newComputeShader(
@@ -265,6 +287,31 @@ function love.update(dt)
 		math.ceil(consts.boxCount / setBoxParticleDataShader:getLocalThreadgroupSize())
 	)
 
+	for i = 2, massTexture:getMipmapCount() do -- All the textures have the same dimensions, so same number of mipmaps
+		local destinationWidth, destinationHeight = boxParticleDataViews.mass[i]:getDimensions()
+		local destinationDepth = boxParticleDataViews.mass[i]:getDepth()
+
+		generateMipmapsShader:send("massSource", boxParticleDataViews.mass[i - 1])
+		generateMipmapsShader:send("massDestination", boxParticleDataViews.mass[i])
+
+		generateMipmapsShader:send("centreOfMassSource", boxParticleDataViews.centreOfMass[i - 1])
+		generateMipmapsShader:send("centreOfMassDestination", boxParticleDataViews.centreOfMass[i])
+
+		local x, y, z = generateMipmapsShader:getLocalThreadgroupSize()
+		love.graphics.dispatchThreadgroups(generateMipmapsShader,
+			math.ceil(destinationWidth / x),
+			math.ceil(destinationHeight / y),
+			math.ceil(destinationDepth / z)
+		)
+	end
+	-- These work fine without manual treatment
+	-- averageColourTexture:generateMipmaps()
+	-- scatteranceTexture:generateMipmaps()
+	-- absorptionTexture:generateMipmaps()
+	-- emissionTexture:generateMipmaps()
+
+	particleAccelerationShader:send("lods", massTexture:getMipmapCount())
+	particleAccelerationShader:send("boxRange", consts.simulationBoxRange)
 	particleAccelerationShader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)})
 	particleAccelerationShader:send("particleCount", consts.particleCount) -- In
 	particleAccelerationShader:send("ParticlesIn", particleBufferA) -- In
@@ -273,8 +320,8 @@ function love.update(dt)
 	particleAccelerationShader:send("ParticleBoxIds", particleBoxIds) -- In
 	particleAccelerationShader:send("SortedParticleBoxIds", sortedParticleBoxIds) -- In
 	particleAccelerationShader:send("BoxArrayData", boxArrayData) -- In
-	particleAccelerationShader:send("mass", massTexture) -- In
-	particleAccelerationShader:send("centreOfMass", centreOfMassTexture) -- In
+	particleAccelerationShader:send("massTexture", massTexture) -- In
+	particleAccelerationShader:send("centreOfMassTexture", centreOfMassTexture) -- In
 	particleAccelerationShader:send("ParticlesOut", particleBufferB) -- Out
 	love.graphics.dispatchThreadgroups(particleAccelerationShader,
 		math.ceil(consts.particleCount / particleAccelerationShader:getLocalThreadgroupSize())
@@ -357,7 +404,7 @@ function love.draw()
 	cloudShader:send("cameraPosition", {vec3.components(camera.position)})
 	cloudShader:send("scatterance", scatteranceTexture)
 	cloudShader:send("absorption", absorptionTexture)
-	cloudShader:send("averageColour", averageColourTexture)
+	-- cloudShader:send("averageColour", averageColourTexture)
 	cloudShader:send("worldSize", {vec3.components(consts.worldSize)})
 	cloudShader:send("emission", emissionTexture)
 	cloudShader:send("rayStepSize", consts.rayStepSize)

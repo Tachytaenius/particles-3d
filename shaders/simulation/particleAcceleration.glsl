@@ -20,9 +20,11 @@ buffer BoxArrayData {
 	uint[] boxArrayData;
 };
 
-uniform layout(r32f) image3D mass;
-uniform layout(rgba32f) image3D centreOfMass;
+uniform sampler3D massTexture;
+uniform sampler3D centreOfMassTexture;
 
+uniform uint lods;
+uniform int boxRange;
 uniform uvec3 worldSizeBoxes;
 uniform float dt;
 uniform float gravityStrength;
@@ -52,20 +54,58 @@ void computemain() {
 	);
 	vec3 accelerationWithoutStrength = vec3(0.0);
 
-	// Gravitate towards all boxes considering their particles together if far and all particles within it individually if near
+	// Iterate with increasing detail (lod 0 is highest detail)
+	// Expects a cube world with the side length being a power of two
 
-	for (uint x = 0; x < worldSizeBoxes.x; x++) {
-		for (uint y = 0; y < worldSizeBoxes.y; y++) {
-			for (uint z = 0; z < worldSizeBoxes.z; z++) {
-				ivec3 boxGridPosition = ivec3(x, y, z); // Signed this time
-				ivec3 absDifference = abs(boxGridPosition - particleBoxGridPosition);
-				// 3x3x3 around particle's own box
-				if (absDifference.x > 1 || absDifference.y > 1 || absDifference.z > 1) {
-					// Too far, just consider its overall influence
-					float mass = imageLoad(mass, boxGridPosition).r;
-					vec3 centreOfMass = imageLoad(centreOfMass, boxGridPosition).rgb;
-					accelerationWithoutStrength += getAccelerationWithoutStrength(mass, centreOfMass - particle.position);
-				} else {
+	uint leastDetailedLod = lods - 1; // Starting lod
+	// Ends are exclusive
+	uvec3 nextLodStart = uvec3(0);
+	uvec3 nextLodEnd = uvec3(1); // Should be worldSizeBoxes >> leastDetailedLod;
+	for (uint lod = lods; lod-- > 0;) { // lods - 1 inclusive to 0 inclusive, because unsigned
+		ivec3 particleBoxGridPositionThisLod = particleBoxGridPosition >> lod;
+		uvec3 thisLodStart = nextLodStart;
+		uvec3 thisLodEnd = nextLodEnd;
+
+		// Initialise to values that will allow anything
+		// I'm not sure I'm supposed to use inf and -inf in a shader
+		nextLodStart = worldSizeBoxes; // Just use lod 0's size
+		nextLodEnd = uvec3(0);
+
+		for (uint x = thisLodStart.x; x < thisLodEnd.x; x++) {
+			for (uint y = thisLodStart.y; y < thisLodEnd.y; y++) {
+				for (uint z = thisLodStart.z; z < thisLodEnd.z; z++) {
+					ivec3 lodBoxPosition = ivec3(x, y, z);
+
+					ivec3 absDelta = abs(lodBoxPosition - particleBoxGridPositionThisLod);
+					if (
+						absDelta.x <= boxRange &&
+						absDelta.y <= boxRange &&
+						absDelta.z <= boxRange
+					) {
+						// Leave this box to other lods
+						nextLodStart = min(nextLodStart, lodBoxPosition * 2);
+						nextLodEnd = max(nextLodEnd, (lodBoxPosition + 1) * 2);
+					} else {
+						// Accelerate to this box at current lod
+						float mass = texelFetch(massTexture, lodBoxPosition, int(lod)).r;
+						vec3 centreOfMass = texelFetch(centreOfMassTexture, lodBoxPosition, int(lod)).rgb;
+						accelerationWithoutStrength += getAccelerationWithoutStrength(mass, centreOfMass - particle.position);
+					}
+				}
+			}
+		}
+	}
+
+	// Lod 0 should have not iterated over the boxes within range of the particle's box. We will iterate over all the (other) particles in those boxes now
+	for (int x = -boxRange; x <= boxRange; x++) {
+		for (int y = -boxRange; y <= boxRange; y++) {
+			for (int z = -boxRange; z <= boxRange; z++) {
+				ivec3 boxGridPosition = particleBoxGridPosition + ivec3(x, y, z);
+				if (
+					0 <= boxGridPosition.x && boxGridPosition.x < worldSizeBoxes.x &&
+					0 <= boxGridPosition.y && boxGridPosition.y < worldSizeBoxes.y &&
+					0 <= boxGridPosition.z && boxGridPosition.z < worldSizeBoxes.z
+				) {
 					// Consider all particles within the box
 					uint boxId = (boxGridPosition.z * worldSizeBoxes.y + boxGridPosition.y) * worldSizeBoxes.x + boxGridPosition.x;
 					uint arrayStart = boxArrayData[boxId];
