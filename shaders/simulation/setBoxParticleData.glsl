@@ -17,6 +17,7 @@ uniform uint boxCount;
 uniform uvec3 worldSizeBoxes;
 uniform vec3 boxSize;
 uniform float boxVolume;
+uniform float darkEnergyDensity;
 
 uniform layout(r32f) image3D mass;
 uniform layout(rgba32f) image3D centreOfMass;
@@ -38,6 +39,7 @@ void computemain() {
 		(mainBoxId / worldSizeBoxes.x) % worldSizeBoxes.y,
 		(mainBoxId / worldSizeBoxes.x) / worldSizeBoxes.y
 	);
+	vec3 mainBoxCentre = (vec3(mainBoxGridPosition) + 0.5) * boxSize;
 
 	// Get particles in main box and consider them for box mass and centre of mass
 	float massTotal = 0.0;
@@ -51,6 +53,11 @@ void computemain() {
 		massTotal += particle.mass;
 		weightedPositionTotal += particle.position * particle.mass;
 	}
+	// Add dark energy (the maths/naming here should be a little different)
+	float darkEnergyMass = darkEnergyDensity * boxVolume;
+	float massTotalPositive = massTotal + abs(darkEnergyMass);
+	massTotal += darkEnergyMass;
+	weightedPositionTotal += mainBoxCentre * abs(darkEnergyMass);
 
 	float scatteranceCrossSectionTotal = 0.0;
 	float absorptionCrossSectionTotal = 0.0;
@@ -58,7 +65,6 @@ void computemain() {
 	vec3 weightedColourTotal = vec3(0.0);
 	float weightedColourWeightTotal = 0.0;
 
-	vec3 mainBoxCentre = (vec3(mainBoxGridPosition) + 0.5) * boxSize;
 	// Get particles in boxes around main box and add them to the cloud data
 	for (int x = -1; x <= 1; x++) {
 		if (x == -1 && mainBoxGridPosition.x == 0 || x == 1 && mainBoxGridPosition.x == worldSizeBoxes.x - 1) {
@@ -104,7 +110,7 @@ void computemain() {
 	);
 	imageStore(centreOfMass, imageCoord,
 		vec4(
-			massTotal > 0.0 ? weightedPositionTotal / massTotal : vec3(0.0), // Don't care value if mass (excluding neighbouring boxes) is zero
+			massTotalPositive > 0.0 ? weightedPositionTotal / massTotalPositive : vec3(0.0), // Don't care value if mass (excluding neighbouring boxes) is zero
 			1.0
 		)
 	);

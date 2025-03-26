@@ -36,7 +36,8 @@ vec3 getAccelerationWithoutStrength(float mass, vec3 relativePosition) {
 		return vec3(0.0);
 	}
 	vec3 direction = normalize(relativePosition);
-	return direction * mass / (dist * dist + softening * softening);
+	float forceMagnitude = mass / (dist * dist + softening * softening);
+	return direction * forceMagnitude;
 }
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;

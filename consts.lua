@@ -66,13 +66,14 @@ function consts.load() -- Avoiding circular dependencies
 	consts.boxSize = vec3(consts.boxWidth, consts.boxHeight, consts.boxDepth)
 	consts.worldSizeBoxes = vec3(consts.worldWidthBoxes, consts.worldHeightBoxes, consts.worldDepthBoxes)
 	consts.worldSize = consts.boxSize * consts.worldSizeBoxes
+	consts.boxVolume = consts.boxSize.x * consts.boxSize.y * consts.boxSize.z
 
 	consts.simulationBoxRange = 1 -- 3x3x3, offsets iterate from -range to range inclusive
 
 	consts.particleCount = 20000
 	consts.startDensityNoiseFrequency = 1 / 64
 	consts.startColourNoiseFrequency = 1 / 32
-	consts.startVelocityRadius = 0.01
+	consts.startVelocityRadius = 0
 
 	consts.volumetricsCanvasFilter = "linear"
 	consts.rayStepSize = 6
@@ -90,6 +91,10 @@ function consts.load() -- Avoiding circular dependencies
 
 	consts.gravityStrength = 1 -- Gravitational constant
 	consts.gravitySoftening = 0.5
+	local averageParticleMass = 4 / 3 -- average value for love.math.random() ^ a * b is the integral from 0 to 1 with respect to x of x ^ a * b, which is x / (a + 1), which is 4 / 3 for love.math.random() ^ 5 * 8
+	local averageNumberDensity = consts.particleCount * averageParticleMass / (consts.boxVolume * consts.boxCount)
+	local density = averageParticleMass * averageNumberDensity
+	consts.darkEnergyDensity = -density * consts.gravityStrength -- Add negative mass to space such that space doesn't really expand or contract
 
 	-- Derived
 	consts.sortedParticleBoxIdBufferSize = util.nextPowerOfTwo(consts.particleCount)

@@ -158,7 +158,7 @@ function love.load()
 	-- Coinciding seeds is... unlikely
 	local seed1 = love.math.random(0, 2^16 - 1)
 	local seed2 = love.math.random(0, 2^16 - 1)
-	local function sampleParticleDensityNoise(position)
+	local function sampleParticleDensityNoise(position) -- Not the actual number density, that would be this multiplied by the number of particles (I think)
 		local noise1 = love.math.simplexNoise(
 			position.x * consts.startDensityNoiseFrequency,
 			position.y * consts.startDensityNoiseFrequency,
@@ -229,7 +229,7 @@ function love.load()
 		end
 		local luminousFlux = {fluxChannel(), fluxChannel(), fluxChannel()} -- Linear space
 
-		local scatteranceCrossSection = love.math.random() * 3
+		local scatteranceCrossSection = love.math.random() * 2
 		local absorptionCrossSection = love.math.random() * 1
 
 		return {
@@ -334,12 +334,13 @@ function love.update(dt)
 			math.ceil(consts.particleCount / setBoxArrayDataShader:getLocalThreadgroupSize())
 		)
 
+		setBoxParticleDataShader:send("darkEnergyDensity", consts.darkEnergyDensity) -- In
 		setBoxParticleDataShader:send("SortedParticleBoxIds", sortedParticleBoxIds) -- In
 		setBoxParticleDataShader:send("Particles", particleBufferA) -- In
 		setBoxParticleDataShader:send("particleCount", consts.particleCount) -- In
 		setBoxParticleDataShader:send("BoxArrayData", boxArrayData) -- In
 		setBoxParticleDataShader:send("boxCount", consts.boxCount) -- In
-		setBoxParticleDataShader:send("boxVolume", consts.boxSize.x * consts.boxSize.y * consts.boxSize.z) -- In
+		setBoxParticleDataShader:send("boxVolume", consts.boxVolume) -- In
 		setBoxParticleDataShader:send("boxSize", {vec3.components(consts.boxSize)}) -- In
 		setBoxParticleDataShader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)}) -- In
 		setBoxParticleDataShader:send("mass", massTexture) -- Out
@@ -375,10 +376,10 @@ function love.update(dt)
 		-- absorptionTexture:generateMipmaps()
 		-- emissionTexture:generateMipmaps()
 
-		particleAccelerationShader:send("softening", consts.gravitySoftening)
-		particleAccelerationShader:send("lods", massTexture:getMipmapCount())
-		particleAccelerationShader:send("boxRange", consts.simulationBoxRange)
-		particleAccelerationShader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)})
+		particleAccelerationShader:send("softening", consts.gravitySoftening)  -- In
+		particleAccelerationShader:send("lods", massTexture:getMipmapCount())  -- In
+		particleAccelerationShader:send("boxRange", consts.simulationBoxRange)  -- In
+		particleAccelerationShader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)})  -- In
 		particleAccelerationShader:send("particleCount", consts.particleCount) -- In
 		particleAccelerationShader:send("ParticlesIn", particleBufferA) -- In
 		particleAccelerationShader:send("gravityStrength", consts.gravityStrength) -- In
