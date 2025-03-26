@@ -21,10 +21,10 @@ uniform float darkEnergyDensity;
 
 uniform layout(r32f) image3D mass;
 uniform layout(rgba32f) image3D centreOfMass;
-uniform layout(r32f) image3D scatterance;
-uniform layout(r32f) image3D absorption;
-uniform layout(rgba32f) image3D averageColour;
-uniform layout(rgba32f) image3D emission;
+uniform layout(r16f) image3D scatterance;
+uniform layout(r16f) image3D absorption;
+uniform layout(r11f_g11f_b10f) image3D averageColour;
+uniform layout(r11f_g11f_b10f) image3D emission;
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 void computemain() {

@@ -103,10 +103,10 @@ function love.load()
 	end
 	massTexture = newBoxParticleDataTexture("mass", "r32f", true, false, "Mass Texture")
 	centreOfMassTexture = newBoxParticleDataTexture("centreOfMass", "rgba32f", true, false, "Centre of Mass Texture") -- Alpha is unused
-	scatteranceTexture = newBoxParticleDataTexture("scatterance", "r32f", false, true, "Scatterance Texture")
-	absorptionTexture = newBoxParticleDataTexture("absorption", "r32f", false, true, "Absorption Texture")
-	averageColourTexture = newBoxParticleDataTexture("averageColour", "rgba32f", false, true, "Average Colour Texture") -- Alpha is unused
-	emissionTexture = newBoxParticleDataTexture("emission", "rgba32f", false, true, "Emission Texture") -- Alpha is unused
+	scatteranceTexture = newBoxParticleDataTexture("scatterance", "r16f", false, true, "Scatterance Texture")
+	absorptionTexture = newBoxParticleDataTexture("absorption", "r16f", false, true, "Absorption Texture")
+	averageColourTexture = newBoxParticleDataTexture("averageColour", "rg11b10f", false, true, "Average Colour Texture") -- Alpha is unused
+	emissionTexture = newBoxParticleDataTexture("emission", "rg11b10f", false, true, "Emission Texture") -- Alpha is unused
 
 	local structsCode = love.filesystem.read("shaders/include/structs.glsl")
 
