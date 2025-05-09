@@ -7,7 +7,6 @@ struct Particle {
 	vec3 cloudEmissionCrossSection;
 	float scatteranceCrossSection;
 	float absorptionCrossSection;
-	float mass;
 	vec3 luminousFlux;
 };
 

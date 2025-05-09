@@ -13,7 +13,8 @@ local particlePositionsShader
 local sortParticleBoxIdsShader
 local clearBoxArrayDataShader
 local setBoxArrayDataShader
-local setBoxParticleDataShader
+local setChargeBoxDataShader
+local setVolumetricBoxDataShader
 local generateMipmapsShader
 local particleAccelerationShader
 
@@ -27,13 +28,13 @@ local dummyTexture
 local outputCanvas
 local camera
 
-local particleBufferA, particleBufferB
+local particleBufferA, particleChargeBuffersA
+local particleBufferB, particleChargeBuffersB
 local particleBoxIds, sortedParticleBoxIds
 local boxArrayData
 local particleDrawData
 
-local massTexture
-local centreOfMassTexture
+local chargeTextures
 local scatteranceTexture
 local absorptionTexture
 local averageColourTexture
@@ -45,14 +46,30 @@ local paused
 local time
 
 function love.load()
+	local function generateChargeBuffers(letter)
+		local buffers = {}
+		for i, charge in ipairs(consts.charges) do
+			local buffer = love.graphics.newBuffer(consts.particleChargeFormat, consts.particleCount, {
+				shaderstorage = true,
+				debugname = "Particle " .. charge.displayName .. " Charges " .. letter
+			})
+			buffers[charge.name] = buffer
+			buffers[i] = buffer
+		end
+		return buffers
+	end
+
 	particleBufferA = love.graphics.newBuffer(consts.particleFormat, consts.particleCount, {
 		shaderstorage = true,
 		debugname = "Particles A"
 	})
+	particleChargeBuffersA = generateChargeBuffers("A")
+
 	particleBufferB = love.graphics.newBuffer(consts.particleFormat, consts.particleCount, {
 		shaderstorage = true,
 		debugname = "Particles B"
 	})
+	particleChargeBuffersB = generateChargeBuffers("B")
 
 	particleBoxIds = love.graphics.newBuffer(consts.particleBoxIdFormat, consts.particleCount, {
 		shaderstorage = true,
@@ -73,6 +90,7 @@ function love.load()
 		debugname = "Particle Draw Data"
 	})
 
+	chargeTextures = {}
 	boxParticleDataViews = {}
 	local function newBoxParticleDataTexture(name, format, mipmaps, volumetrics, debugName)
 		local canvas = love.graphics.newCanvas(consts.worldWidthBoxes, consts.worldHeightBoxes, consts.worldDepthBoxes, {
@@ -101,8 +119,9 @@ function love.load()
 		end
 		return canvas
 	end
-	massTexture = newBoxParticleDataTexture("mass", "r32f", true, false, "Mass Texture")
-	centreOfMassTexture = newBoxParticleDataTexture("centreOfMass", "rgba32f", true, false, "Centre of Mass Texture") -- Alpha is unused
+	for _, charge in ipairs(consts.charges) do
+		chargeTextures[charge.name] = newBoxParticleDataTexture(charge.name, "rgba32f", true, false, charge.displayName .. " Texture") -- Centre x, y, z, then fourth component is charge amount
+	end
 	scatteranceTexture = newBoxParticleDataTexture("scatterance", "r16f", false, true, "Scatterance Texture")
 	absorptionTexture = newBoxParticleDataTexture("absorption", "r16f", false, true, "Absorption Texture")
 	averageColourTexture = newBoxParticleDataTexture("averageColour", "rg11b10f", false, true, "Average Colour Texture") -- Alpha is unused
@@ -110,9 +129,10 @@ function love.load()
 
 	local structsCode = love.filesystem.read("shaders/include/structs.glsl")
 
-	local function stage(name)
+	local function stage(name, prepend)
 		return love.graphics.newComputeShader(
 			structsCode ..
+			(prepend or "") ..
 			love.filesystem.read("shaders/simulation/" .. name .. ".glsl")
 		)
 	end
@@ -120,9 +140,17 @@ function love.load()
 	sortParticleBoxIdsShader = stage("sortParticleBoxIds")
 	clearBoxArrayDataShader = stage("clearBoxArrayData")
 	setBoxArrayDataShader = stage("setBoxArrayData")
-	setBoxParticleDataShader = stage("setBoxParticleData")
+	setChargeBoxDataShader = stage("setChargeBoxData")
+	setVolumetricBoxDataShader = stage("setVolumetricBoxData")
 	generateMipmapsShader = stage("generateMipmaps")
-	particleAccelerationShader = stage("particleAcceleration")
+	local accelerationPrepend = "#line 1\n"
+	for _, charge in ipairs(consts.charges) do
+		accelerationPrepend = accelerationPrepend ..
+			"readonly buffer " .. charge.pascalName .. "Charges {\n" ..
+			"\tfloat[] " .. charge.name .. "Charges;\n" ..
+			"};\n\n"
+	end
+	particleAccelerationShader = stage("particleAcceleration", accelerationPrepend)
 
 	particleStarShader = love.graphics.newComputeShader(
 		"#pragma language glsl4\n" ..
@@ -204,15 +232,30 @@ function love.load()
 	end
 
 	local particleData = {}
+	local particleChargeData = {}
+	for i = 1, #consts.charges do
+		particleChargeData[i] = {}
+	end
 	local function newParticle(position)
+		local i = #particleData + 1
+
+		local function setCharge(name, value)
+			particleChargeData[consts.charges[name].index][i] = value
+			return value
+		end
+
+		local mass = setCharge("mass", love.math.random() ^ 1.5)
+		local electricCharge = setCharge("electric",
+			(love.math.random() < 0.2 and mass * (love.math.random() * 0.01) or 0)
+			* (love.math.random() < 0.5 and 1 or -1)
+		)
+
 		local velocity = util.randomInSphereVolume(consts.startVelocityRadius)
 
 		local function colourChannel()
 			return love.math.random()
 		end
 		local colour = {colourChannel(), colourChannel(), colourChannel()}
-
-		local mass = love.math.random() ^ 5 * 8
 
 		-- local cloudEmissionCrossSection = {4, 1, 3} -- Linear space
 		-- local function emissionChannel()
@@ -232,16 +275,17 @@ function love.load()
 		local scatteranceCrossSection = love.math.random() * 2
 		local absorptionCrossSection = love.math.random() * 1
 
-		return {
+		local particle = {
 			position.x, position.y, position.z,
 			velocity.x, velocity.y, velocity.z,
 			colour[1], colour[2], colour[3],
 			cloudEmissionCrossSection[1], cloudEmissionCrossSection[2], cloudEmissionCrossSection[3],
 			scatteranceCrossSection,
 			absorptionCrossSection,
-			mass,
-			luminousFlux[1], luminousFlux[2], luminousFlux[3]
+			luminousFlux[1], luminousFlux[2], luminousFlux[3],
 		}
+
+		particleData[i] = particle
 	end
 	for i = 1, consts.particleCount do
 		local position
@@ -253,10 +297,13 @@ function love.load()
 			) * consts.worldSize
 			local noise = sampleParticleDensityNoise(position)
 		until love.math.random() < noise
-		local particle = newParticle(position)
-		particleData[i] = particle
+		newParticle(position)
 	end
 	particleBufferB:setArrayData(particleData) -- Gets swapped immediately
+	for i, data in ipairs(particleChargeData) do
+		particleChargeBuffersB[i]:setArrayData(data)
+		particleChargeBuffersA[i]:setArrayData(data) -- TEMP: Allow charges to change over time
+	end
 
 	local sortedParticleBoxIdsData = {}
 	local invalid = 0xFFFFFFFF -- UINT32_MAX
@@ -291,11 +338,12 @@ end
 function love.update(dt)
 	if not paused then
 		particleBufferA, particleBufferB = particleBufferB, particleBufferA
+		particleChargeBuffersA, particleChargeBuffersB = particleChargeBuffersB, particleChargeBuffersA
 
 		particlePositionsShader:send("particleCount", consts.particleCount) -- In
 		particlePositionsShader:send("dt", dt) -- In
-		particlePositionsShader:send("boxSize", {consts.boxWidth, consts.boxHeight, consts.boxDepth})
-		particlePositionsShader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)})
+		particlePositionsShader:send("boxSize", {consts.boxWidth, consts.boxHeight, consts.boxDepth}) -- In
+		particlePositionsShader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)}) -- In
 		particlePositionsShader:send("Particles", particleBufferA) -- In/out
 		particlePositionsShader:send("ParticleBoxIds", particleBoxIds) -- Out
 		particlePositionsShader:send("ParticleBoxIdsToSort", sortedParticleBoxIds) -- Out
@@ -334,41 +382,53 @@ function love.update(dt)
 			math.ceil(consts.particleCount / setBoxArrayDataShader:getLocalThreadgroupSize())
 		)
 
-		setBoxParticleDataShader:send("darkEnergyDensity", consts.darkEnergyDensity) -- In
-		setBoxParticleDataShader:send("SortedParticleBoxIds", sortedParticleBoxIds) -- In
-		setBoxParticleDataShader:send("Particles", particleBufferA) -- In
-		setBoxParticleDataShader:send("particleCount", consts.particleCount) -- In
-		setBoxParticleDataShader:send("BoxArrayData", boxArrayData) -- In
-		setBoxParticleDataShader:send("boxCount", consts.boxCount) -- In
-		setBoxParticleDataShader:send("boxVolume", consts.boxVolume) -- In
-		setBoxParticleDataShader:send("boxSize", {vec3.components(consts.boxSize)}) -- In
-		setBoxParticleDataShader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)}) -- In
-		setBoxParticleDataShader:send("mass", massTexture) -- Out
-		setBoxParticleDataShader:send("centreOfMass", centreOfMassTexture) -- Out
-		setBoxParticleDataShader:send("scatterance", scatteranceTexture) -- Out
-		setBoxParticleDataShader:send("absorption", absorptionTexture) -- Out
-		setBoxParticleDataShader:send("averageColour", averageColourTexture) -- Out
-		setBoxParticleDataShader:send("emission", emissionTexture) -- Out
-		love.graphics.dispatchThreadgroups(setBoxParticleDataShader,
-			math.ceil(consts.boxCount / setBoxParticleDataShader:getLocalThreadgroupSize())
+		local function sendToBoxDataStage(shader)
+			shader:send("Particles", particleBufferA) -- In
+			shader:send("SortedParticleBoxIds", sortedParticleBoxIds) -- In
+			shader:send("particleCount", consts.particleCount) -- In
+			shader:send("BoxArrayData", boxArrayData) -- In
+			shader:send("boxCount", consts.boxCount) -- In
+			shader:send("boxVolume", consts.boxVolume) -- In
+			shader:send("boxSize", {vec3.components(consts.boxSize)}) -- In
+			shader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)}) -- In
+		end
+
+		sendToBoxDataStage(setChargeBoxDataShader)
+		for i, charge in ipairs(consts.charges) do
+			setChargeBoxDataShader:send("ParticleCharges", particleChargeBuffersA[i]) -- In
+			setChargeBoxDataShader:send("spaceDensity", charge.spaceDensity) -- In
+			setChargeBoxDataShader:send("charge", chargeTextures[charge.name]) -- Out
+			love.graphics.dispatchThreadgroups(setChargeBoxDataShader,
+				math.ceil(consts.boxCount / setChargeBoxDataShader:getLocalThreadgroupSize())
+			)
+		end
+
+		sendToBoxDataStage(setVolumetricBoxDataShader)
+		setVolumetricBoxDataShader:send("scatterance", scatteranceTexture) -- Out
+		setVolumetricBoxDataShader:send("absorption", absorptionTexture) -- Out
+		setVolumetricBoxDataShader:send("averageColour", averageColourTexture) -- Out
+		setVolumetricBoxDataShader:send("emission", emissionTexture) -- Out
+		setVolumetricBoxDataShader:send("MassCharges", particleChargeBuffersA.mass)
+		love.graphics.dispatchThreadgroups(setVolumetricBoxDataShader,
+			math.ceil(consts.boxCount / setVolumetricBoxDataShader:getLocalThreadgroupSize())
 		)
 
-		for i = 2, massTexture:getMipmapCount() do -- All the textures have the same dimensions, so same number of mipmaps
-			local destinationWidth, destinationHeight = boxParticleDataViews.mass[i]:getDimensions()
-			local destinationDepth = boxParticleDataViews.mass[i]:getDepth()
+		for _, chargeInfo in ipairs(chargeTextures) do
+			local name = chargeInfo.name
+			for i = 2, chargeTextures[name]:getMipmapCount() do -- All the textures have the same dimensions, so same number of mipmaps
+				local destinationWidth, destinationHeight = boxParticleDataViews[name][i]:getDimensions()
+				local destinationDepth = boxParticleDataViews[name][i]:getDepth()
 
-			generateMipmapsShader:send("massSource", boxParticleDataViews.mass[i - 1])
-			generateMipmapsShader:send("massDestination", boxParticleDataViews.mass[i])
+				generateMipmapsShader:send("chargeSource", boxParticleDataViews[name][i - 1])
+				generateMipmapsShader:send("chargeDestination", boxParticleDataViews[name][i])
 
-			generateMipmapsShader:send("centreOfMassSource", boxParticleDataViews.centreOfMass[i - 1])
-			generateMipmapsShader:send("centreOfMassDestination", boxParticleDataViews.centreOfMass[i])
-
-			local x, y, z = generateMipmapsShader:getLocalThreadgroupSize()
-			love.graphics.dispatchThreadgroups(generateMipmapsShader,
-				math.ceil(destinationWidth / x),
-				math.ceil(destinationHeight / y),
-				math.ceil(destinationDepth / z)
-			)
+				local x, y, z = generateMipmapsShader:getLocalThreadgroupSize()
+				love.graphics.dispatchThreadgroups(generateMipmapsShader,
+					math.ceil(destinationWidth / x),
+					math.ceil(destinationHeight / y),
+					math.ceil(destinationDepth / z)
+				)
+			end
 		end
 		-- These work fine without manual treatment
 		-- averageColourTexture:generateMipmaps()
@@ -376,20 +436,24 @@ function love.update(dt)
 		-- absorptionTexture:generateMipmaps()
 		-- emissionTexture:generateMipmaps()
 
-		particleAccelerationShader:send("softening", consts.gravitySoftening)  -- In
-		particleAccelerationShader:send("lods", massTexture:getMipmapCount())  -- In
+		particleAccelerationShader:send("gravityStrength", consts.gravityStrength) -- In
+		particleAccelerationShader:send("gravitySoftening", consts.gravitySoftening)  -- In
+		particleAccelerationShader:send("electromagnetismStrength", consts.electromagnetismStrength) -- In
+		particleAccelerationShader:send("electromagnetismSoftening", consts.electromagnetismSoftening)  -- In
+		particleAccelerationShader:send("lods", chargeTextures[consts.charges[1].name]:getMipmapCount())  -- In
 		particleAccelerationShader:send("boxRange", consts.simulationBoxRange)  -- In
 		particleAccelerationShader:send("worldSizeBoxes", {vec3.components(consts.worldSizeBoxes)})  -- In
 		particleAccelerationShader:send("particleCount", consts.particleCount) -- In
 		particleAccelerationShader:send("ParticlesIn", particleBufferA) -- In
-		particleAccelerationShader:send("gravityStrength", consts.gravityStrength) -- In
 		particleAccelerationShader:send("dt", dt) -- In
 		particleAccelerationShader:send("ParticleBoxIds", particleBoxIds) -- In
 		particleAccelerationShader:send("SortedParticleBoxIds", sortedParticleBoxIds) -- In
 		particleAccelerationShader:send("BoxArrayData", boxArrayData) -- In
-		particleAccelerationShader:send("massTexture", massTexture) -- In
-		particleAccelerationShader:send("centreOfMassTexture", centreOfMassTexture) -- In
 		particleAccelerationShader:send("ParticlesOut", particleBufferB) -- Out
+		for _, charge in ipairs(consts.charges) do
+			particleAccelerationShader:send(charge.pascalName .. "Charges", particleChargeBuffersA[charge.name])
+			particleAccelerationShader:send(charge.name .. "Texture", chargeTextures[charge.name])
+		end
 		love.graphics.dispatchThreadgroups(particleAccelerationShader,
 			math.ceil(consts.particleCount / particleAccelerationShader:getLocalThreadgroupSize())
 		)

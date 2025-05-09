@@ -5,6 +5,10 @@ buffer Particles {
 };
 uniform uint particleCount;
 
+readonly buffer MassCharges {
+	float[] massCharges;
+};
+
 buffer SortedParticleBoxIds {
 	SortedParticleBoxId[] sortedParticleBoxIds;
 };
@@ -17,10 +21,7 @@ uniform uint boxCount;
 uniform uvec3 worldSizeBoxes;
 uniform vec3 boxSize;
 uniform float boxVolume;
-uniform float darkEnergyDensity;
 
-uniform layout(r32f) image3D mass;
-uniform layout(rgba32f) image3D centreOfMass;
 uniform layout(r16f) image3D scatterance;
 uniform layout(r16f) image3D absorption;
 uniform layout(r11f_g11f_b10f) image3D averageColour;
@@ -40,24 +41,6 @@ void computemain() {
 		(mainBoxId / worldSizeBoxes.x) / worldSizeBoxes.y
 	);
 	vec3 mainBoxCentre = (vec3(mainBoxGridPosition) + 0.5) * boxSize;
-
-	// Get particles in main box and consider them for box mass and centre of mass
-	float massTotal = 0.0;
-	vec3 weightedPositionTotal = vec3(0.0);
-	for (uint i = mainBoxArrayStart; i < particleCount; i++) { // Just to stop from going over particleCount, this is more likely to hit break
-		if (sortedParticleBoxIds[i].boxId != mainBoxId) {
-			break;
-		}
-		uint particleId = sortedParticleBoxIds[i].particleId;
-		Particle particle = particles[particleId];
-		massTotal += particle.mass;
-		weightedPositionTotal += particle.position * particle.mass;
-	}
-	// Add dark energy (the maths/naming here should be a little different)
-	float darkEnergyMass = darkEnergyDensity * boxVolume;
-	float massTotalPositive = massTotal + abs(darkEnergyMass);
-	massTotal += darkEnergyMass;
-	weightedPositionTotal += mainBoxCentre * abs(darkEnergyMass);
 
 	float scatteranceCrossSectionTotal = 0.0;
 	float absorptionCrossSectionTotal = 0.0;
@@ -97,23 +80,14 @@ void computemain() {
 					cloudEmissionCrossSectionTotal += particle.cloudEmissionCrossSection * influence;
 					scatteranceCrossSectionTotal += particle.scatteranceCrossSection * influence;
 					absorptionCrossSectionTotal += particle.absorptionCrossSection * influence;
-					weightedColourTotal += particle.colour * particle.mass * influence;
-					weightedColourWeightTotal += particle.mass * influence;
+					weightedColourTotal += particle.colour * massCharges[particleId] * influence;
+					weightedColourWeightTotal += massCharges[particleId] * influence;
 				}
 			}
 		}
 	}
 
 	ivec3 imageCoord = ivec3(mainBoxGridPosition);
-	imageStore(mass, imageCoord,
-		vec4(massTotal, 0.0, 0.0, 1.0)
-	);
-	imageStore(centreOfMass, imageCoord,
-		vec4(
-			massTotalPositive > 0.0 ? weightedPositionTotal / massTotalPositive : vec3(0.0), // Don't care value if mass (excluding neighbouring boxes) is zero
-			1.0
-		)
-	);
 	imageStore(scatterance, imageCoord,
 		vec4(scatteranceCrossSectionTotal / boxVolume, 0.0, 0.0, 1.0)
 	);
@@ -122,7 +96,7 @@ void computemain() {
 	);
 	imageStore(averageColour, imageCoord,
 		vec4(
-			weightedColourWeightTotal > 0.0 ? weightedColourTotal / weightedColourWeightTotal : vec3(0.0), // Don't care value if mass (including neighbouring boxes) is zero
+			weightedColourWeightTotal > 0.0 ? weightedColourTotal / weightedColourWeightTotal : vec3(0.0), // Don't care value if colour weight (including neighbouring boxes) is zero
 			1.0
 		)
 	);

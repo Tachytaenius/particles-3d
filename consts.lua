@@ -7,43 +7,11 @@ local consts = {}
 function consts.load() -- Avoiding circular dependencies
 	consts.tau = math.pi * 2
 
-	consts.particleFormat = {
-		{name = "position", format = "floatvec3"},
-		{name = "velocity", format = "floatvec3"},
-		{name = "colour", format = "floatvec3"},
-		{name = "cloudEmissionCrossSection", format = "floatvec3"},
-		{name = "scatteranceCrossSection", format = "float"},
-		{name = "absorptionCrossSection", format = "float"},
-		{name = "mass", format = "float"},
-		{name = "luminousFlux", format = "floatvec3"}
-	}
-
-	consts.particleBoxIdFormat = {
-		{name = "boxId", format = "uint32"}
-	}
-
-	consts.sortedParticleBoxIdFormat = {
-		{name = "boxId", format = "uint32"},
-		{name = "particleId", format = "uint32"}
-	}
-
-	consts.boxArrayEntryFormat = {
-		{name = "start", format = "uint32"}
-	}
-
-	consts.particleDrawDataFormat = {
-		{name = "direction", format = "floatvec3"},
-		{name = "incomingLight", format = "floatvec3"}
-	}
-
-	consts.particleMeshFormat = {
-		{name = "VertexPosition", location = 0, format = "float"} -- Dummy
-	}
-
-	consts.diskMeshFormat = {
-		{name = "VertexPosition", location = 0, format = "floatvec2"},
-		{name = "VertexFade", location = 1, format = "float"}
-	}
+	-- These are specific to charge calculations which can be anything, the automation is more for defining charges
+	consts.gravityStrength = 1 -- Gravitational constant
+	consts.gravitySoftening = 0.5
+	consts.electromagnetismStrength = 1
+	consts.electromagnetismSoftening = 0.5
 
 	consts.boxWidth = 4
 	consts.boxHeight = 4
@@ -70,7 +38,7 @@ function consts.load() -- Avoiding circular dependencies
 
 	consts.simulationBoxRange = 1 -- 3x3x3, offsets iterate from -range to range inclusive
 
-	consts.particleCount = 20000
+	consts.particleCount = 10000
 	consts.startDensityNoiseFrequency = 1 / 64
 	consts.startColourNoiseFrequency = 1 / 32
 	consts.startVelocityRadius = 0
@@ -88,13 +56,6 @@ function consts.load() -- Avoiding circular dependencies
 
 	-- Derived
 	consts.starDiskSolidAngle = consts.tau * (1 - math.cos(consts.starDiskAngularRadius))
-
-	consts.gravityStrength = 1 -- Gravitational constant
-	consts.gravitySoftening = 0.5
-	local averageParticleMass = 4 / 3 -- average value for love.math.random() ^ a * b is the integral from 0 to 1 with respect to x of x ^ a * b, which is x / (a + 1), which is 4 / 3 for love.math.random() ^ 5 * 8
-	local averageNumberDensity = consts.particleCount * averageParticleMass / (consts.boxVolume * consts.boxCount)
-	local density = averageParticleMass * averageNumberDensity
-	consts.darkEnergyDensity = -density * consts.gravityStrength -- Add negative mass to space such that space doesn't really expand or contract
 
 	-- Derived
 	consts.sortedParticleBoxIdBufferSize = util.nextPowerOfTwo(consts.particleCount)
@@ -117,6 +78,66 @@ function consts.load() -- Avoiding circular dependencies
 		yawLeft = "j",
 		rollAnticlockwise = "u",
 		rollClockwise = "o"
+	}
+
+	consts.particleFormat = {
+		{name = "position", format = "floatvec3"},
+		{name = "velocity", format = "floatvec3"},
+		{name = "colour", format = "floatvec3"},
+		{name = "cloudEmissionCrossSection", format = "floatvec3"},
+		{name = "scatteranceCrossSection", format = "float"},
+		{name = "absorptionCrossSection", format = "float"},
+		{name = "luminousFlux", format = "floatvec3"}
+	}
+	consts.particleChargeFormat = {
+		{name = "charge", format = "float"}
+	}
+
+	consts.charges = {}
+	local function newCharge(name, pascalName, displayName, spaceDensity)
+		local i = #consts.charges + 1
+		local chargeInfo = {
+			name = name,
+			pascalName = pascalName,
+			displayName = displayName,
+			index = i,
+			spaceDensity = spaceDensity
+		}
+		consts.charges[name] = chargeInfo
+		consts.charges[i] = chargeInfo
+	end
+	local averageParticleMass = 4 / 3 -- average value for love.math.random() ^ a * b is the integral from 0 to 1 with respect to x of x ^ a * b, which is x / (a + 1), which is 4 / 3 for love.math.random() ^ 5 * 8. Should probably make this automatic
+	local averageNumberDensity = consts.particleCount * averageParticleMass / (consts.boxVolume * consts.boxCount)
+	local density = averageParticleMass * averageNumberDensity
+	local darkEnergyDensity = -density * consts.gravityStrength
+	newCharge("mass", "Mass", "Mass", -darkEnergyDensity)
+	newCharge("electric", "Electric", "Electric", 0)
+
+	consts.particleBoxIdFormat = {
+		{name = "boxId", format = "uint32"}
+	}
+
+	consts.sortedParticleBoxIdFormat = {
+		{name = "boxId", format = "uint32"},
+		{name = "particleId", format = "uint32"}
+	}
+
+	consts.boxArrayEntryFormat = {
+		{name = "start", format = "uint32"}
+	}
+
+	consts.particleDrawDataFormat = {
+		{name = "direction", format = "floatvec3"},
+		{name = "incomingLight", format = "floatvec3"}
+	}
+
+	consts.particleMeshFormat = {
+		{name = "VertexPosition", location = 0, format = "float"} -- Dummy
+	}
+
+	consts.diskMeshFormat = {
+		{name = "VertexPosition", location = 0, format = "floatvec2"},
+		{name = "VertexFade", location = 1, format = "float"}
 	}
 end
 

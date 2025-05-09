@@ -1,10 +1,7 @@
 #line 1
 
-uniform layout(r32f) image3D massSource;
-uniform layout(r32f) image3D massDestination;
-
-uniform layout(rgba32f) image3D centreOfMassSource;
-uniform layout(rgba32f) image3D centreOfMassDestination;
+uniform layout(rgba32f) image3D chargeSource;
+uniform layout(rgba32f) image3D chargeDestination;
 
 layout(local_size_x = 2, local_size_y = 2, local_size_z = 2) in;
 void computemain() {
@@ -21,31 +18,26 @@ void computemain() {
 	ivec3 ppn = nnn + s.xyw;
 	ivec3 ppp = nnn + s.xyz;
 
-	float nnnMass = imageLoad(massSource, nnn).r;
-	float nnpMass = imageLoad(massSource, nnp).r;
-	float npnMass = imageLoad(massSource, npn).r;
-	float nppMass = imageLoad(massSource, npp).r;
-	float pnnMass = imageLoad(massSource, pnn).r;
-	float pnpMass = imageLoad(massSource, pnp).r;
-	float ppnMass = imageLoad(massSource, ppn).r;
-	float pppMass = imageLoad(massSource, ppp).r;
+	float nnnCharge = imageLoad(chargeSource, nnn).r;
+	float nnpCharge = imageLoad(chargeSource, nnp).r;
+	float npnCharge = imageLoad(chargeSource, npn).r;
+	float nppCharge = imageLoad(chargeSource, npp).r;
+	float pnnCharge = imageLoad(chargeSource, pnn).r;
+	float pnpCharge = imageLoad(chargeSource, pnp).r;
+	float ppnCharge = imageLoad(chargeSource, ppn).r;
+	float pppCharge = imageLoad(chargeSource, ppp).r;
 
-	float massSum = nnnMass + nnpMass + npnMass + nppMass + pnnMass + pnpMass + ppnMass + pppMass;
+	float chargeSum = nnnCharge + nnpCharge + npnCharge + nppCharge + pnnCharge + pnpCharge + ppnCharge + pppCharge;
 
-	imageStore(massDestination, destinationCoord, vec4(
-		massSum,
-		0.0, 0.0, 1.0
-	));
-
-	imageStore(centreOfMassDestination, destinationCoord, vec4(
-		massSum != 0.0 ? ( // Avoid dividing by zero
+	imageStore(chargeDestination, destinationCoord, vec4(
+		chargeSum != 0.0 ? ( // Avoid dividing by zero
 			( // Weighted average
-				imageLoad(centreOfMassSource, nnn).rgb * nnnMass + imageLoad(centreOfMassSource, nnp).rgb * nnpMass +
-				imageLoad(centreOfMassSource, npn).rgb * npnMass + imageLoad(centreOfMassSource, npp).rgb * nppMass +
-				imageLoad(centreOfMassSource, pnn).rgb * pnnMass + imageLoad(centreOfMassSource, pnp).rgb * pnpMass +
-				imageLoad(centreOfMassSource, ppn).rgb * ppnMass + imageLoad(centreOfMassSource, ppp).rgb * pppMass
-			) / massSum
+				imageLoad(chargeSource, nnn).xyz * nnnCharge + imageLoad(chargeSource, nnp).xyz * nnpCharge +
+				imageLoad(chargeSource, npn).xyz * npnCharge + imageLoad(chargeSource, npp).xyz * nppCharge +
+				imageLoad(chargeSource, pnn).xyz * pnnCharge + imageLoad(chargeSource, pnp).xyz * pnpCharge +
+				imageLoad(chargeSource, ppn).xyz * ppnCharge + imageLoad(chargeSource, ppp).xyz * pppCharge
+			) / chargeSum
 		) : vec3(0.0),
-		1.0
+		chargeSum
 	));
 }

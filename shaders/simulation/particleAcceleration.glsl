@@ -21,22 +21,36 @@ buffer BoxArrayData {
 };
 
 uniform sampler3D massTexture;
-uniform sampler3D centreOfMassTexture;
+uniform sampler3D electricTexture;
 
 uniform uint lods;
 uniform int boxRange;
 uniform uvec3 worldSizeBoxes;
 uniform float dt;
-uniform float gravityStrength;
-uniform float softening;
 
-vec3 getAccelerationWithoutStrength(float mass, vec3 relativePosition) {
+uniform float gravityStrength;
+uniform float gravitySoftening;
+
+uniform float electromagnetismStrength;
+uniform float electromagnetismSoftening;
+
+vec3 getGravityAccelerationWithoutStrength(float mass, vec3 relativePosition) {
 	float dist = length(relativePosition);
 	if (dist == 0.0) { // >= epsilon...?
 		return vec3(0.0);
 	}
 	vec3 direction = normalize(relativePosition);
-	float forceMagnitude = mass / (dist * dist + softening * softening);
+	float forceMagnitude = mass / (dist * dist + gravitySoftening * gravitySoftening);
+	return direction * forceMagnitude;
+}
+
+vec3 getElectromagnetismForceWithoutStrength(float chargeA, float chargeB, vec3 relativePosition) {
+	float dist = length(relativePosition);
+	if (dist == 0.0) { // >= epsilon...?
+		return vec3(0.0);
+	}
+	vec3 direction = normalize(relativePosition);
+	float forceMagnitude = chargeA * chargeB * (dist * dist + electromagnetismSoftening * electromagnetismSoftening);
 	return direction * forceMagnitude;
 }
 
@@ -54,7 +68,9 @@ void computemain() {
 		(particleBoxId / worldSizeBoxes.x) % worldSizeBoxes.y,
 		(particleBoxId / worldSizeBoxes.x) / worldSizeBoxes.y
 	);
-	vec3 accelerationWithoutStrength = vec3(0.0);
+
+	vec3 gravityAccelerationWithoutStrength = vec3(0.0);
+	vec3 electromagnetismForceWithoutStrength = vec3(0.0);
 
 	// Iterate with increasing detail (lod 0 is highest detail)
 	// Expects a cube world with the side length being a power of two
@@ -89,9 +105,18 @@ void computemain() {
 						nextLodEnd = max(nextLodEnd, (lodBoxPosition + 1) * 2);
 					} else {
 						// Accelerate to this box at current lod
-						float mass = texelFetch(massTexture, lodBoxPosition, int(lod)).r;
-						vec3 centreOfMass = texelFetch(centreOfMassTexture, lodBoxPosition, int(lod)).rgb;
-						accelerationWithoutStrength += getAccelerationWithoutStrength(mass, centreOfMass - particle.position);
+
+						// Gravity
+						vec4 massInfo = texelFetch(massTexture, lodBoxPosition, int(lod));
+						float mass = massInfo[3];
+						vec3 centreOfMass = massInfo.xyz;
+						gravityAccelerationWithoutStrength += getGravityAccelerationWithoutStrength(mass, centreOfMass - particle.position);
+
+						// Electromagnetism
+						vec4 chargeInfo = texelFetch(electricTexture, lodBoxPosition, int(lod));
+						float electricCharge = chargeInfo[3];
+						vec3 centreOfCharge = chargeInfo.xyz;
+						electromagnetismForceWithoutStrength += getElectromagnetismForceWithoutStrength(electricCharges[particleId], electricCharge, centreOfCharge - particle.position);
 					}
 				}
 			}
@@ -123,14 +148,21 @@ void computemain() {
 							continue;
 						}
 						Particle otherParticle = particlesIn[otherParticleId];
-						accelerationWithoutStrength += getAccelerationWithoutStrength(otherParticle.mass, otherParticle.position - particle.position);
+
+						// Gravity
+						gravityAccelerationWithoutStrength += getGravityAccelerationWithoutStrength(massCharges[otherParticleId], otherParticle.position - particle.position);
+
+						// Electromagnetism
+						electromagnetismForceWithoutStrength += getElectromagnetismForceWithoutStrength(electricCharges[particleId], electricCharges[otherParticleId], otherParticle.position - particle.position);
 					}
 				}
 			}
 		}
 	}
 
-	vec3 acceleration = accelerationWithoutStrength * gravityStrength;
+	vec3 acceleration = vec3(0.0);
+	acceleration += gravityAccelerationWithoutStrength * gravityStrength;
+	acceleration += electromagnetismForceWithoutStrength * electromagnetismStrength / massCharges[particleId];
 	particle.velocity += acceleration * dt;
 	// Position is already handled
 
