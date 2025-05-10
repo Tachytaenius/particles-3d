@@ -18,14 +18,14 @@ void computemain() {
 	ivec3 ppn = nnn + s.xyw;
 	ivec3 ppp = nnn + s.xyz;
 
-	float nnnCharge = imageLoad(chargeSource, nnn).r;
-	float nnpCharge = imageLoad(chargeSource, nnp).r;
-	float npnCharge = imageLoad(chargeSource, npn).r;
-	float nppCharge = imageLoad(chargeSource, npp).r;
-	float pnnCharge = imageLoad(chargeSource, pnn).r;
-	float pnpCharge = imageLoad(chargeSource, pnp).r;
-	float ppnCharge = imageLoad(chargeSource, ppn).r;
-	float pppCharge = imageLoad(chargeSource, ppp).r;
+	float nnnCharge = imageLoad(chargeSource, nnn)[3];
+	float nnpCharge = imageLoad(chargeSource, nnp)[3];
+	float npnCharge = imageLoad(chargeSource, npn)[3];
+	float nppCharge = imageLoad(chargeSource, npp)[3];
+	float pnnCharge = imageLoad(chargeSource, pnn)[3];
+	float pnpCharge = imageLoad(chargeSource, pnp)[3];
+	float ppnCharge = imageLoad(chargeSource, ppn)[3];
+	float pppCharge = imageLoad(chargeSource, ppp)[3];
 
 	float chargeSum = nnnCharge + nnpCharge + npnCharge + nppCharge + pnnCharge + pnpCharge + ppnCharge + pppCharge;
 

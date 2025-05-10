@@ -22,6 +22,15 @@ buffer BoxArrayData {
 
 uniform sampler3D massTexture;
 uniform sampler3D electricTexture;
+#ifdef COLOUR_ENABLED
+uniform sampler3D redTexture;
+uniform sampler3D greenTexture;
+uniform sampler3D blueTexture;
+uniform sampler3D antiredTexture;
+uniform sampler3D antigreenTexture;
+uniform sampler3D antiblueTexture;
+uniform sampler3D spacingTexture;
+#endif
 
 uniform uint lods;
 uniform int boxRange;
@@ -33,6 +42,17 @@ uniform float gravitySoftening;
 
 uniform float electromagnetismStrength;
 uniform float electromagnetismSoftening;
+
+#ifdef COLOUR_ENABLED
+uniform float colourForceStrength;
+uniform float colourForcePower;
+uniform float colourForceSoftening;
+uniform float colourForceDistanceDivide;
+uniform float spacingForceStrength;
+uniform float spacingForceSoftening;
+uniform float spacingForcePower;
+uniform float spacingForceDistanceDivide;
+#endif
 
 vec3 getGravityAccelerationWithoutStrength(float mass, vec3 relativePosition) {
 	float dist = length(relativePosition);
@@ -50,9 +70,65 @@ vec3 getElectromagnetismForceWithoutStrength(float chargeA, float chargeB, vec3 
 		return vec3(0.0);
 	}
 	vec3 direction = normalize(relativePosition);
-	float forceMagnitude = chargeA * chargeB * (dist * dist + electromagnetismSoftening * electromagnetismSoftening);
+	float forceMagnitude = -1.0 * chargeA * chargeB / (dist * dist + electromagnetismSoftening * electromagnetismSoftening);
 	return direction * forceMagnitude;
 }
+
+#ifdef COLOUR_ENABLED
+const int colourChargeCount = 6;
+vec3 getColourForceWithoutStrength(float[colourChargeCount] chargesA, float[colourChargeCount] chargesB, vec3[colourChargeCount] relativePositions) {
+	vec3 force = vec3(0.0);
+	for (int i = 0; i < colourChargeCount; i++) {
+		float aChargeI = chargesA[i];
+		if (aChargeI == 0.0) {
+			continue;
+		}
+
+		int oppositeId = (i + colourChargeCount / 2) % colourChargeCount;
+		int adjacentNegId = (i - 1) % colourChargeCount;
+		int adjacentPosId = (i + 1) % colourChargeCount;
+
+		for (int j = 0; j < colourChargeCount; j++) {
+			float bChargeJ = chargesB[j];
+			if (bChargeJ == 0.0) {
+				continue;
+			}
+
+			vec3 relativePosition = relativePositions[j];
+			float dist = length(relativePosition);
+			if (dist == 0.0) { // >= epsilon...?
+				continue;
+			}
+			vec3 direction = normalize(relativePosition);
+
+			float multiplier;
+			if (j == i) {
+				multiplier = -2.0;
+			// } else if (j == oppositeId) {
+			// 	multiplier = 1.0;
+			} else if (j == adjacentNegId || j == adjacentPosId) {
+				multiplier = -0.5;
+			} else {
+				multiplier = 1.0;
+			}
+			force += direction * aChargeI * bChargeJ * multiplier / (pow(dist / colourForceDistanceDivide, colourForcePower) + pow(colourForceSoftening, colourForcePower));
+		}
+	}
+	return force;
+}
+
+vec3 getSpacingForceWithoutStrength(float chargeA, float chargeB, float massA, float massB, vec3 relativeVelocity, vec3 relativePosition) {
+	float dist = length(relativePosition);
+	if (dist == 0.0) { // >= epsilon...?
+		return vec3(0.0);
+	}
+	vec3 direction = normalize(relativePosition);
+	float forceMagnitude = -1.0 * chargeA * chargeB / (pow(dist / spacingForceDistanceDivide, spacingForcePower) + pow(spacingForceSoftening, spacingForcePower))
+		* massA * massB
+		* clamp(-dot(relativePosition, relativeVelocity), 0.0, 1.0);
+	return direction * forceMagnitude;
+}
+#endif
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 void computemain() {
@@ -71,6 +147,8 @@ void computemain() {
 
 	vec3 gravityAccelerationWithoutStrength = vec3(0.0);
 	vec3 electromagnetismForceWithoutStrength = vec3(0.0);
+	vec3 colourForceWithoutStrength = vec3(0.0);
+	vec3 spacingForceWithoutStrength = vec3(0.0);
 
 	// Iterate with increasing detail (lod 0 is highest detail)
 	// Expects a cube world with the side length being a power of two
@@ -113,10 +191,50 @@ void computemain() {
 						gravityAccelerationWithoutStrength += getGravityAccelerationWithoutStrength(mass, centreOfMass - particle.position);
 
 						// Electromagnetism
-						vec4 chargeInfo = texelFetch(electricTexture, lodBoxPosition, int(lod));
-						float electricCharge = chargeInfo[3];
-						vec3 centreOfCharge = chargeInfo.xyz;
-						electromagnetismForceWithoutStrength += getElectromagnetismForceWithoutStrength(electricCharges[particleId], electricCharge, centreOfCharge - particle.position);
+						vec4 electricChargeInfo = texelFetch(electricTexture, lodBoxPosition, int(lod));
+						float electricCharge = electricChargeInfo[3];
+						vec3 centreOfElectricCharge = electricChargeInfo.xyz;
+						electromagnetismForceWithoutStrength += getElectromagnetismForceWithoutStrength(electricCharges[particleId], electricCharge, centreOfElectricCharge - particle.position);
+
+#ifdef COLOUR_ENABLED
+						// Colour force
+						vec4 redChargeInfo = texelFetch(redTexture, lodBoxPosition, int(lod));
+						vec4 greenChargeInfo = texelFetch(greenTexture, lodBoxPosition, int(lod));
+						vec4 blueChargeInfo = texelFetch(blueTexture, lodBoxPosition, int(lod));
+						vec4 antiredChargeInfo = texelFetch(antiredTexture, lodBoxPosition, int(lod));
+						vec4 antigreenChargeInfo = texelFetch(antigreenTexture, lodBoxPosition, int(lod));
+						vec4 antiblueChargeInfo = texelFetch(antiblueTexture, lodBoxPosition, int(lod));
+						colourForceWithoutStrength += getColourForceWithoutStrength(
+							float[](
+								redCharges[particleId],
+								antiblueCharges[particleId],
+								greenCharges[particleId],
+								antiredCharges[particleId],
+								blueCharges[particleId],
+								antigreenCharges[particleId]
+							),
+							float[](
+								redChargeInfo[3],
+								antiblueChargeInfo[3],
+								greenChargeInfo[3],
+								antiredChargeInfo[3],
+								blueChargeInfo[3],
+								antigreenChargeInfo[3]
+							),
+							vec3[](
+								redChargeInfo.xyz - particle.position,
+								antiblueChargeInfo.xyz - particle.position,
+								greenChargeInfo.xyz - particle.position,
+								antiredChargeInfo.xyz - particle.position,
+								blueChargeInfo.xyz - particle.position,
+								antigreenChargeInfo.xyz - particle.position
+							)
+						);
+
+						// Spacing force is too short range to need calculation here,
+						// and I'm not sure how I'd get its use of velocity to work either!
+						// If it's possible, it'd be very cool to understand.
+#endif
 					}
 				}
 			}
@@ -148,12 +266,51 @@ void computemain() {
 							continue;
 						}
 						Particle otherParticle = particlesIn[otherParticleId];
+						vec3 relativePosition = otherParticle.position - particle.position;
 
 						// Gravity
-						gravityAccelerationWithoutStrength += getGravityAccelerationWithoutStrength(massCharges[otherParticleId], otherParticle.position - particle.position);
+						gravityAccelerationWithoutStrength += getGravityAccelerationWithoutStrength(massCharges[otherParticleId], relativePosition);
 
 						// Electromagnetism
-						electromagnetismForceWithoutStrength += getElectromagnetismForceWithoutStrength(electricCharges[particleId], electricCharges[otherParticleId], otherParticle.position - particle.position);
+						electromagnetismForceWithoutStrength += getElectromagnetismForceWithoutStrength(electricCharges[particleId], electricCharges[otherParticleId], relativePosition);
+
+#ifdef COLOUR_ENABLED
+						// Colour force
+						colourForceWithoutStrength += getColourForceWithoutStrength(
+							float[](
+								redCharges[particleId],
+								antiblueCharges[particleId],
+								greenCharges[particleId],
+								antiredCharges[particleId],
+								blueCharges[particleId],
+								antigreenCharges[particleId]
+							),
+							float[](
+								redCharges[otherParticleId],
+								antiblueCharges[otherParticleId],
+								greenCharges[otherParticleId],
+								antiredCharges[otherParticleId],
+								blueCharges[otherParticleId],
+								antigreenCharges[otherParticleId]
+							),
+							vec3[](
+								relativePosition,
+								relativePosition,
+								relativePosition,
+								relativePosition,
+								relativePosition,
+								relativePosition
+							)
+						);
+
+						// Spacing force
+						spacingForceWithoutStrength += getSpacingForceWithoutStrength(
+							spacingCharges[particleId], spacingCharges[otherParticleId],
+							massCharges[particleId], massCharges[otherParticleId],
+							otherParticle.velocity - particle.velocity,
+							relativePosition
+						);
+#endif
 					}
 				}
 			}
@@ -161,8 +318,13 @@ void computemain() {
 	}
 
 	vec3 acceleration = vec3(0.0);
+	float mass = massCharges[particleId];
 	acceleration += gravityAccelerationWithoutStrength * gravityStrength;
-	acceleration += electromagnetismForceWithoutStrength * electromagnetismStrength / massCharges[particleId];
+	acceleration += electromagnetismForceWithoutStrength * electromagnetismStrength / mass;
+#ifdef COLOUR_ENABLED
+	acceleration += colourForceWithoutStrength * colourForceStrength / mass;
+	acceleration += spacingForceWithoutStrength * spacingForceStrength / mass;
+#endif
 	particle.velocity += acceleration * dt;
 	// Position is already handled
 
